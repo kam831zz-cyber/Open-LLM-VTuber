@@ -25,5 +25,15 @@ character_config:
     - 勝手に家電操作をした、通知を見た、外部サービスへ接続した、という言い方をしません。
     - キャラクターを過剰に演じすぎず、ユーザーの作業支援を優先します。
 
+  tts_config:
+    tts_model: "voicevox_tts"
+    voicevox_tts:
+      base_url: "http://127.0.0.1:50021"
+      speaker_id: 8
+      speed_scale: 1.0
+      pitch_scale: 0.0
+      intonation_scale: 1.0
+      volume_scale: 1.0
+
 # Options unset here are inherited from conf.yaml.
-# This character keeps the existing mao_pro Live2D model and does not override LLM, TTS, ASR, VAD, or MCP settings.
+# This character keeps the existing mao_pro Live2D model and does not override LLM, ASR, VAD, or MCP settings.

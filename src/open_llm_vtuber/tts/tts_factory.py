@@ -155,6 +155,18 @@ class TTSFactory:
                 ),  # Will use default "mp3" if not in kwargs
             )
 
+        elif engine_type == "voicevox_tts":
+            from .voicevox_tts import TTSEngine as VoicevoxTTSEngine
+
+            return VoicevoxTTSEngine(
+                base_url=kwargs.get("base_url"),
+                speaker_id=kwargs.get("speaker_id"),
+                speed_scale=kwargs.get("speed_scale"),
+                pitch_scale=kwargs.get("pitch_scale"),
+                intonation_scale=kwargs.get("intonation_scale"),
+                volume_scale=kwargs.get("volume_scale"),
+            )
+
         elif engine_type == "spark_tts":
             #         api_url: str = "http://127.0.0.1:7860/",
             #         prompt_wav_upload: str = "voice_clone/voice_clone_voice.wav",

@@ -374,6 +374,26 @@ class OpenAITTSConfig(I18nMixin):
     }
 
 
+class VoicevoxTTSConfig(I18nMixin):
+    """Configuration for VOICEVOX TTS."""
+
+    base_url: str = Field("http://127.0.0.1:50021", alias="base_url")
+    speaker_id: int = Field(8, alias="speaker_id")
+    speed_scale: float = Field(1.0, alias="speed_scale")
+    pitch_scale: float = Field(0.0, alias="pitch_scale")
+    intonation_scale: float = Field(1.0, alias="intonation_scale")
+    volume_scale: float = Field(1.0, alias="volume_scale")
+
+    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+        "base_url": Description(en="Base URL of the VOICEVOX Engine", zh="VOICEVOX Engine URL"),
+        "speaker_id": Description(en="VOICEVOX speaker style ID", zh="VOICEVOX speaker style ID"),
+        "speed_scale": Description(en="Speech speed scale", zh="Speech speed scale"),
+        "pitch_scale": Description(en="Pitch scale", zh="Pitch scale"),
+        "intonation_scale": Description(en="Intonation scale", zh="Intonation scale"),
+        "volume_scale": Description(en="Volume scale", zh="Volume scale"),
+    }
+
+
 class SparkTTSConfig(I18nMixin):
     """Configuration for Spark TTS."""
 
@@ -448,6 +468,7 @@ class TTSConfig(I18nMixin):
         "sherpa_onnx_tts",
         "siliconflow_tts",
         "openai_tts",  # Add openai_tts here
+        "voicevox_tts",
         "spark_tts",
         "minimax_tts",
     ] = Field(..., alias="tts_model")
@@ -469,6 +490,7 @@ class TTSConfig(I18nMixin):
         None, alias="siliconflow_tts"
     )
     openai_tts: Optional[OpenAITTSConfig] = Field(None, alias="openai_tts")
+    voicevox_tts: Optional[VoicevoxTTSConfig] = Field(None, alias="voicevox_tts")
     spark_tts: Optional[SparkTTSConfig] = Field(None, alias="spark_tts")
     minimax_tts: Optional[MinimaxTTSConfig] = Field(None, alias="minimax_tts")
 
@@ -502,6 +524,9 @@ class TTSConfig(I18nMixin):
         ),
         "openai_tts": Description(
             en="Configuration for OpenAI-compatible TTS", zh="OpenAI 兼容 TTS 配置"
+        ),
+        "voicevox_tts": Description(
+            en="Configuration for VOICEVOX TTS", zh="VOICEVOX TTS configuration"
         ),
         "spark_tts": Description(en="Configuration for Spark TTS", zh="Spark TTS 配置"),
         "minimax_tts": Description(
@@ -540,6 +565,8 @@ class TTSConfig(I18nMixin):
             values.siliconflow_tts.model_validate(values.siliconflow_tts.model_dump())
         elif tts_model == "openai_tts" and values.openai_tts is not None:
             values.openai_tts.model_validate(values.openai_tts.model_dump())
+        elif tts_model == "voicevox_tts" and values.voicevox_tts is not None:
+            values.voicevox_tts.model_validate(values.voicevox_tts.model_dump())
         elif tts_model == "spark_tts" and values.spark_tts is not None:
             values.spark_tts.model_validate(values.spark_tts.model_dump())
         elif tts_model == "minimax_tts" and values.minimax_tts is not None:
