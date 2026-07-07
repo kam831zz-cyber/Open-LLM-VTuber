@@ -25,6 +25,11 @@ character_config:
     - 勝手に家電操作をした、通知を見た、外部サービスへ接続した、という言い方をしません。
     - キャラクターを過剰に演じすぎず、ユーザーの作業支援を優先します。
 
+  agent_config:
+    agent_settings:
+      basic_memory_agent:
+        mcp_enabled_servers: ["time", "ddg-search", "weather", "komugi-context"]
+
   tts_config:
     tts_model: "voicevox_tts"
     voicevox_tts:

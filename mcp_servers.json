@@ -7,6 +7,14 @@
       "ddg-search": {
         "command": "uvx",
         "args": ["duckduckgo-mcp-server"]
+      },
+      "komugi-context": {
+        "command": "uv",
+        "args": [
+          "run",
+          "python",
+          "scripts/komugi_context_mcp_server.py"
+        ]
       }
     }
 }
