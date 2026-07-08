@@ -382,6 +382,10 @@ class BasicMemoryAgent(AgentInterface):
                 return line[2:].strip()
         return ""
 
+    def _context_line_is_ok(self, line: str) -> bool:
+        lowered = line.lower()
+        return "ok" in lowered or "接続ok" in lowered or "利用可能" in lowered
+
     def _build_komugi_context_answer(
         self, input_data: BatchInput, context_text: str
     ) -> str:
@@ -410,13 +414,12 @@ class BasicMemoryAgent(AgentInterface):
             voicevox = self._extract_context_line(context_text, "VOICEVOX")
             ollama = self._extract_context_line(context_text, "Ollama")
             if voicevox or ollama:
-                parts = []
-                if voicevox:
-                    parts.append(voicevox)
-                if ollama:
-                    parts.append(ollama)
-                return "Command Centerのbridge情報では、" + "、".join(parts) + "。"
-            return "VOICEVOXとOllamaの接続状態は、Command Centerのcontextでは確認できません。"
+                if self._context_line_is_ok(voicevox) and self._context_line_is_ok(
+                    ollama
+                ):
+                    return "VOICEVOXとOllamaはどちらも接続OKです。"
+                return "VOICEVOXとOllamaの接続状態は、Command Centerで確認できます。"
+            return "VOICEVOXとOllamaの接続状態は確認できません。"
 
         if "通知" in text_prompt:
             notifications = []
@@ -433,8 +436,8 @@ class BasicMemoryAgent(AgentInterface):
                     notifications.append(title or notification)
             if notifications:
                 count = len(notifications)
-                return f"通知が{count}件あります。"
-            return "現在、Command Centerのcontextでは通知を確認できません。"
+                return f"通知は{count}件あります。詳しくはCommand Centerで確認できます。"
+            return "通知は確認できません。"
 
         if (
             "home assistant" in text_prompt
@@ -448,29 +451,24 @@ class BasicMemoryAgent(AgentInterface):
             device_control = self._extract_context_value(context_text, "device_control")
             home_assistant = self._extract_context_line(context_text, "Home Assistant")
             if home_assistant_control or device_control or home_assistant:
-                return (
-                    "Home Assistantや家電操作は、現在のCommand Center contextでは"
-                    f"まだ実行できません。{home_assistant}".strip()
-                )
-            return "Home Assistantや家電操作の可否は、Command Centerのcontextでは確認できません。"
+                return "まだ家電操作はできません。今は状態確認だけ対応しています。"
+            return "Home Assistantや家電操作の可否は確認できません。"
 
         if "command center" in text_prompt or "状態" in text_prompt or "アプリ" in text_prompt:
             status = self._extract_context_value(context_text, "status")
-            apps_registered = self._extract_context_value(context_text, "apps_registered")
             command_center = self._extract_context_line(context_text, "Command Center API")
             open_llm = self._extract_context_line(context_text, "Open-LLM-VTuber")
-            parts = []
+            voicevox = self._extract_context_line(context_text, "VOICEVOX")
+            ollama = self._extract_context_line(context_text, "Ollama")
+            main_services_ok = all(
+                self._context_line_is_ok(line)
+                for line in [command_center, open_llm, voicevox, ollama]
+            )
+            if status == "ok" and main_services_ok:
+                return "Command Centerは正常です。主要サービスも接続OKです。"
             if status:
-                parts.append(f"system status={status}")
-            if apps_registered:
-                parts.append(f"apps_registered={apps_registered}")
-            if command_center:
-                parts.append(command_center)
-            if open_llm:
-                parts.append(open_llm)
-            if parts:
-                return "Command Centerの状態は、" + "、".join(parts) + "です。"
-            return "Command Centerの状態は、contextでは確認できません。"
+                return "Command Centerの状態はCommand Centerで確認できます。"
+            return "Command Centerの状態は確認できません。"
 
         if "天気" in text_prompt:
             weather = self._extract_context_line(context_text, "天気")
