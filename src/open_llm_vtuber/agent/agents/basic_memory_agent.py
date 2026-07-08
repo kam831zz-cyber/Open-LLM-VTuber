@@ -8,6 +8,8 @@ from typing import (
     Union,
     Optional,
 )
+import uuid
+import re
 from loguru import logger
 from .agent_interface import AgentInterface
 from ..output_types import SentenceOutput, DisplayText
@@ -286,6 +288,197 @@ class BasicMemoryAgent(AgentInterface):
             logger.warning("No content generated for user message.")
 
         return messages
+
+    def _should_prefetch_komugi_context(self, input_data: BatchInput) -> bool:
+        """Return True when household state questions should force Komugi context."""
+        if not (self._use_mcpp and self._tool_manager and self._tool_executor):
+            return False
+        if not self._tool_manager.get_tool("get_komugi_context"):
+            return False
+
+        text_prompt = self._to_text_prompt(input_data).lower()
+        if not text_prompt:
+            return False
+
+        keywords = [
+            "ゴミ",
+            "ごみ",
+            "明日",
+            "今日",
+            "通知",
+            "天気",
+            "command center",
+            "home assistant",
+            "homeassistant",
+            "アプリ",
+            "接続",
+            "操作",
+            "家電",
+            "つなが",
+            "繋が",
+            "voicevox",
+            "ollama",
+            "japan monitor",
+            "ジャパンモニター",
+            "状態",
+        ]
+        return any(keyword in text_prompt for keyword in keywords)
+
+    async def _prefetch_komugi_context(
+        self,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Run get_komugi_context before the LLM when local context is required."""
+        tool_id = f"prefetch_{uuid.uuid4().hex[:8]}"
+        tool_call = {
+            "id": tool_id,
+            "name": "get_komugi_context",
+            "input": {},
+        }
+        tool_executor_iterator = self._tool_executor.execute_tools(
+            tool_calls=[tool_call],
+            caller_mode="OpenAI",
+        )
+        context_text = ""
+
+        async for update in tool_executor_iterator:
+            if update.get("type") == "final_tool_results":
+                results = update.get("results", [])
+                for result in results:
+                    if result.get("tool_call_id") == tool_id:
+                        context_text = str(result.get("content", ""))
+                continue
+
+            if (
+                update.get("type") == "tool_call_status"
+                and update.get("tool_name") == "get_komugi_context"
+                and update.get("status") == "completed"
+            ):
+                context_text = str(update.get("content", ""))
+
+            yield update
+
+        if context_text:
+            yield {
+                "type": "komugi_context_prefetch_result",
+                "content": context_text,
+            }
+
+    def _extract_context_value(self, context_text: str, label: str) -> str:
+        match = re.search(rf"{re.escape(label)}:\s*([^/\n;]+)", context_text)
+        return match.group(1).strip() if match else ""
+
+    def _extract_first_context_value(
+        self, context_text: str, labels: List[str]
+    ) -> str:
+        for label in labels:
+            value = self._extract_context_value(context_text, label)
+            if value:
+                return value
+        return ""
+
+    def _extract_context_line(self, context_text: str, label: str) -> str:
+        for line in context_text.splitlines():
+            if line.startswith(f"- {label}:"):
+                return line[2:].strip()
+        return ""
+
+    def _build_komugi_context_answer(
+        self, input_data: BatchInput, context_text: str
+    ) -> str:
+        """Build short deterministic replies for high-priority home context facts."""
+        text_prompt = self._to_text_prompt(input_data).lower()
+        if not context_text:
+            return ""
+
+        if ("ゴミ" in text_prompt or "ごみ" in text_prompt) and "明日" in text_prompt:
+            tomorrow = self._extract_first_context_value(
+                context_text, ["tomorrow/明日", "明日", "tomorrow"]
+            )
+            if tomorrow:
+                return f"明日のゴミ出しは「{tomorrow}」です。"
+            return "明日のゴミ出し情報は、Command Centerのcontextでは確認できません。"
+
+        if ("ゴミ" in text_prompt or "ごみ" in text_prompt) and "今日" in text_prompt:
+            today = self._extract_first_context_value(
+                context_text, ["today/今日", "今日", "today"]
+            )
+            if today:
+                return f"今日のゴミ出しは「{today}」です。"
+            return "今日のゴミ出し情報は、Command Centerのcontextでは確認できません。"
+
+        if "voicevox" in text_prompt or "ollama" in text_prompt:
+            voicevox = self._extract_context_line(context_text, "VOICEVOX")
+            ollama = self._extract_context_line(context_text, "Ollama")
+            if voicevox or ollama:
+                parts = []
+                if voicevox:
+                    parts.append(voicevox)
+                if ollama:
+                    parts.append(ollama)
+                return "Command Centerのbridge情報では、" + "、".join(parts) + "。"
+            return "VOICEVOXとOllamaの接続状態は、Command Centerのcontextでは確認できません。"
+
+        if "通知" in text_prompt:
+            notifications = []
+            in_section = False
+            for line in context_text.splitlines():
+                if line == "notifications:":
+                    in_section = True
+                    continue
+                if in_section and line.endswith(":"):
+                    break
+                if in_section and line.startswith("- "):
+                    notification = line[2:]
+                    title = notification.split(":", 1)[0].strip()
+                    notifications.append(title or notification)
+            if notifications:
+                count = len(notifications)
+                return f"通知が{count}件あります。"
+            return "現在、Command Centerのcontextでは通知を確認できません。"
+
+        if (
+            "home assistant" in text_prompt
+            or "homeassistant" in text_prompt
+            or "家電" in text_prompt
+            or "操作" in text_prompt
+        ):
+            home_assistant_control = self._extract_context_value(
+                context_text, "home_assistant_control"
+            )
+            device_control = self._extract_context_value(context_text, "device_control")
+            home_assistant = self._extract_context_line(context_text, "Home Assistant")
+            if home_assistant_control or device_control or home_assistant:
+                return (
+                    "Home Assistantや家電操作は、現在のCommand Center contextでは"
+                    f"まだ実行できません。{home_assistant}".strip()
+                )
+            return "Home Assistantや家電操作の可否は、Command Centerのcontextでは確認できません。"
+
+        if "command center" in text_prompt or "状態" in text_prompt or "アプリ" in text_prompt:
+            status = self._extract_context_value(context_text, "status")
+            apps_registered = self._extract_context_value(context_text, "apps_registered")
+            command_center = self._extract_context_line(context_text, "Command Center API")
+            open_llm = self._extract_context_line(context_text, "Open-LLM-VTuber")
+            parts = []
+            if status:
+                parts.append(f"system status={status}")
+            if apps_registered:
+                parts.append(f"apps_registered={apps_registered}")
+            if command_center:
+                parts.append(command_center)
+            if open_llm:
+                parts.append(open_llm)
+            if parts:
+                return "Command Centerの状態は、" + "、".join(parts) + "です。"
+            return "Command Centerの状態は、contextでは確認できません。"
+
+        if "天気" in text_prompt:
+            weather = self._extract_context_line(context_text, "天気")
+            if weather:
+                return weather
+            return "天気情報は、Command Centerのcontextでは確認できません。"
+
+        return ""
 
     async def _claude_tool_interaction_loop(
         self,
@@ -622,6 +815,46 @@ class BasicMemoryAgent(AgentInterface):
                     logger.warning(
                         f"No tools available/formatted for '{tool_mode}' mode, despite MCP being enabled."
                     )
+
+            if self._should_prefetch_komugi_context(input_data):
+                logger.info("Prefetching Komugi context before household-state reply.")
+                prefetched_context = ""
+                async for update in self._prefetch_komugi_context():
+                    if update.get("type") == "komugi_context_prefetch_result":
+                        prefetched_context = update.get("content", "")
+                    else:
+                        yield update
+
+                if prefetched_context:
+                    context_message = {
+                        "role": "system",
+                        "content": (
+                            "get_komugi_context was called for this turn. "
+                            "Use the following Command Center context as the ground truth. "
+                            "Do not call get_komugi_context again in this turn. "
+                            "If the requested household fact is not present, say it cannot be confirmed. "
+                            "Do not ask for date or location unless this context lacks the relevant information.\n\n"
+                            f"{prefetched_context}"
+                        ),
+                    }
+                    insert_at = max(len(messages) - 1, 0)
+                    messages.insert(insert_at, context_message)
+                    if tools:
+                        tools = [
+                            tool
+                            for tool in tools
+                            if tool.get("function", {}).get("name")
+                            != "get_komugi_context"
+                            and tool.get("name") != "get_komugi_context"
+                        ]
+                    direct_answer = self._build_komugi_context_answer(
+                        input_data, prefetched_context
+                    )
+                    if direct_answer:
+                        logger.info("Answering directly from prefetched Komugi context.")
+                        self._add_message(direct_answer, "assistant")
+                        yield direct_answer
+                        return
 
             if self._use_mcpp and tool_mode == "Claude":
                 logger.debug(

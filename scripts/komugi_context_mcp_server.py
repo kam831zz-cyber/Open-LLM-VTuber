@@ -9,7 +9,7 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("komugi-context")
 
 DEFAULT_CONTEXT_URL = "http://127.0.0.1:8000/api/komugi/context"
-TIMEOUT_SECONDS = 5
+TIMEOUT_SECONDS = 12
 MAX_ITEMS = 8
 MAX_NOTIFICATIONS = 5
 MAX_TEXT_LENGTH = 4000
@@ -50,6 +50,36 @@ def _format_summary(data: dict[str, Any]) -> list[str]:
             line += f"; updated={updated}"
         lines.append(line)
     return lines
+
+
+def _format_garbage_calendar(data: dict[str, Any]) -> list[str]:
+    summary = data.get("summary") or {}
+    cards = summary.get("cards") or []
+    for card in cards:
+        title = _as_text(card.get("title"), "")
+        card_id = _as_text(card.get("id"), "")
+        haystack = f"{title} {card_id}".lower()
+        if not any(word in haystack for word in ["ゴミ", "ごみ", "garbage"]):
+            continue
+
+        values: dict[str, str] = {}
+        for row in card.get("rows") or []:
+            label = _as_text(row.get("label"), "")
+            value = _as_text(row.get("value"), "")
+            if label and value:
+                values[label] = value
+
+        lines = []
+        if values.get("今日"):
+            lines.append(f"- today/今日: {values['今日']}")
+        if values.get("明日"):
+            lines.append(f"- tomorrow/明日: {values['明日']}")
+        if values.get("今週"):
+            lines.append(f"- this_week/今週: {values['今週']}")
+        if values.get("メモ"):
+            lines.append(f"- memo/メモ: {values['メモ']}")
+        return lines
+    return []
 
 
 def _format_apps(data: dict[str, Any]) -> list[str]:
@@ -134,6 +164,7 @@ def _format_context(data: dict[str, Any]) -> str:
     sections = [
         f"Home AI Command Center context generated_at={generated_at}",
         _section("summary", _format_summary(data)),
+        _section("garbage_calendar", _format_garbage_calendar(data)),
         _section("notifications", _format_notifications(data)),
         _section("apps", _format_apps(data)),
         _section("system", _format_system(data)),
@@ -173,10 +204,16 @@ def fetch_komugi_context(url: str = DEFAULT_CONTEXT_URL) -> str:
 def get_komugi_context() -> str:
     """Get a compact read-only status summary from Home AI Command Center.
 
-    Use this tool when the user asks about Command Center, Komugi's local context,
-    registered home apps, notifications, weather/garbage summary, bridge status,
-    or what household/system state is currently known. The tool is read-only and
-    cannot operate Home Assistant or devices.
+    Always use this tool first when the user asks about garbage collection
+    (including today/tomorrow), notifications, weather, Command Center status,
+    registered home apps, bridge status, connection status, VOICEVOX, Ollama,
+    Japan Monitor, or what household/system state is currently known.
+    Answer from the returned context when it contains the requested fact.
+    Do not tell the user to use get_komugi_context; call this tool yourself
+    before answering those household questions.
+    Do not invent garbage weekday rules or household state that is absent from
+    the context. The tool is read-only and cannot operate Home Assistant or
+    devices.
     """
     return fetch_komugi_context()
 
