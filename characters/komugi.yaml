@@ -40,7 +40,7 @@ character_config:
   agent_config:
     agent_settings:
       basic_memory_agent:
-        mcp_enabled_servers: ["time", "ddg-search", "weather", "komugi-context"]
+        mcp_enabled_servers: ["time", "ddg-search", "komugi-context"]
 
   tts_config:
     tts_model: "voicevox_tts"
