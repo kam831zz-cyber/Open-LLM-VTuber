@@ -8,6 +8,7 @@ It uses FastAPI for the server and Starlette for static file serving.
 
 import os
 import shutil
+from pathlib import Path
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
@@ -15,8 +16,8 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
-from .service_context import ServiceContext
-from .config_manager.utils import Config
+from .service_context import ServiceContext, deep_merge
+from .config_manager.utils import Config, read_yaml, validate_config
 
 
 # Create a custom StaticFiles class that adds CORS headers
@@ -151,7 +152,36 @@ class WebSocketServer:
     async def initialize(self):
         """Asynchronously load the service context from config.
         Calling this function is needed if default_context_cache was not provided to the constructor."""
-        await self.default_context_cache.load_from_config(self.config)
+        config = self.config
+        default_character_config = (
+            config.system_config.default_character_config or ""
+        ).strip()
+
+        if default_character_config and default_character_config != "conf.yaml":
+            characters_dir = Path(config.system_config.config_alts_dir)
+            file_path = (characters_dir / default_character_config).resolve()
+            characters_root = characters_dir.resolve()
+            if not file_path.is_relative_to(characters_root):
+                raise ValueError("Invalid default character configuration path")
+
+            alt_config_data = read_yaml(str(file_path)).get("character_config")
+            if not alt_config_data:
+                raise ValueError(
+                    f"Default character configuration not found: {default_character_config}"
+                )
+
+            character_config = deep_merge(
+                config.character_config.model_dump(), alt_config_data
+            )
+            config = validate_config(
+                {
+                    "system_config": config.system_config.model_dump(),
+                    "character_config": character_config,
+                    "live_config": config.live_config.model_dump(),
+                }
+            )
+
+        await self.default_context_cache.load_from_config(config)
 
     @staticmethod
     def clean_cache():

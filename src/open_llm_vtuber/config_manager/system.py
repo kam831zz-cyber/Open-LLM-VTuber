@@ -11,6 +11,7 @@ class SystemConfig(I18nMixin):
     host: str = Field(..., alias="host")
     port: int = Field(..., alias="port")
     config_alts_dir: str = Field(..., alias="config_alts_dir")
+    default_character_config: str = Field("", alias="default_character_config")
     tool_prompts: Dict[str, str] = Field(..., alias="tool_prompts")
     enable_proxy: bool = Field(False, alias="enable_proxy")
 
