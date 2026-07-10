@@ -1,9 +1,11 @@
 import os
 import json
+import re
 from uuid import uuid4
 import numpy as np
 from datetime import datetime
-from fastapi import APIRouter, WebSocket, UploadFile, File, Response
+import requests
+from fastapi import APIRouter, WebSocket, UploadFile, File, Response, Body
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 from loguru import logger
@@ -82,6 +84,170 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
     """
 
     router = APIRouter()
+
+    voicevox_standard_speaker_id = 8
+
+    def get_voicevox_config():
+        if not default_context_cache.character_config:
+            return None
+        tts_config = default_context_cache.character_config.tts_config
+        if not tts_config or not tts_config.voicevox_tts:
+            return None
+        return tts_config.voicevox_tts
+
+    def flatten_voicevox_speakers(speakers):
+        result = []
+        if isinstance(speakers, dict) and "value" in speakers:
+            speakers = speakers["value"]
+        if not isinstance(speakers, list):
+            return result
+
+        for speaker in speakers:
+            speaker_name = speaker.get("name", "")
+            for style in speaker.get("styles", []):
+                style_id = style.get("id")
+                if style_id is None:
+                    continue
+                style_name = style.get("name", "")
+                label = f"{speaker_name} / {style_name}"
+                if style_id == voicevox_standard_speaker_id:
+                    label = f"標準: {label}"
+                result.append(
+                    {
+                        "id": style_id,
+                        "speaker_name": speaker_name,
+                        "style_name": style_name,
+                        "label": label,
+                    }
+                )
+        return sorted(result, key=lambda item: item["id"])
+
+    def update_voicevox_speaker_id_in_file(file_path: str, speaker_id: int) -> bool:
+        if not os.path.exists(file_path):
+            return False
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        pattern = (
+            r"(voicevox_tts:\s*(?:\r?\n[ \t]+[^\r\n]*)*?"
+            r"\r?\n[ \t]*speaker_id:\s*)\d+"
+        )
+        updated, count = re.subn(pattern, rf"\g<1>{speaker_id}", content, count=1)
+        if count == 0:
+            return False
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(updated)
+        return True
+
+    def persist_voicevox_speaker_id(speaker_id: int) -> list[str]:
+        updated_files = []
+        conf_uid = default_context_cache.character_config.conf_uid
+        target_files = []
+        if conf_uid == "komugi_001":
+            target_files.append(
+                os.path.join(
+                    default_context_cache.system_config.config_alts_dir, "komugi.yaml"
+                )
+            )
+        else:
+            target_files.append("conf.yaml")
+
+        for file_path in target_files:
+            try:
+                if update_voicevox_speaker_id_in_file(file_path, speaker_id):
+                    updated_files.append(file_path)
+            except Exception as e:
+                logger.warning(f"Failed to persist VOICEVOX speaker in {file_path}: {e}")
+        return updated_files
+
+    @router.get("/api/voicevox/speakers")
+    async def get_voicevox_speakers():
+        """Return available VOICEVOX speakers and the active speaker ID."""
+        voicevox_config = get_voicevox_config()
+        if not voicevox_config:
+            return JSONResponse(
+                {
+                    "enabled": False,
+                    "message": "VOICEVOX TTS is not configured.",
+                    "standard_speaker_id": voicevox_standard_speaker_id,
+                    "speakers": [],
+                }
+            )
+
+        base_url = voicevox_config.base_url.rstrip("/")
+        current_speaker_id = voicevox_config.speaker_id
+        speakers = []
+        engine_ok = False
+        try:
+            response = requests.get(f"{base_url}/speakers", timeout=5)
+            response.raise_for_status()
+            response.encoding = "utf-8"
+            speakers = flatten_voicevox_speakers(response.json())
+            engine_ok = True
+        except Exception as e:
+            logger.warning(f"Failed to fetch VOICEVOX speakers from {base_url}: {e}")
+
+        current = next(
+            (speaker for speaker in speakers if speaker["id"] == current_speaker_id),
+            None,
+        )
+        return JSONResponse(
+            {
+                "enabled": True,
+                "engine_ok": engine_ok,
+                "base_url": base_url,
+                "current_speaker_id": current_speaker_id,
+                "current_label": current["label"] if current else f"speaker {current_speaker_id}",
+                "standard_speaker_id": voicevox_standard_speaker_id,
+                "standard_label": "標準: 春日部つむぎ / ノーマル",
+                "speakers": speakers,
+            }
+        )
+
+    @router.post("/api/voicevox/speaker")
+    async def set_voicevox_speaker(payload: dict = Body(...)):
+        """Set the active VOICEVOX speaker ID for the running TTS engine."""
+        voicevox_config = get_voicevox_config()
+        if not voicevox_config:
+            return JSONResponse(
+                {"ok": False, "message": "VOICEVOX TTS is not configured."},
+                status_code=400,
+            )
+
+        try:
+            speaker_id = int(payload.get("speaker_id"))
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {"ok": False, "message": "speaker_id must be an integer."},
+                status_code=400,
+            )
+
+        voicevox_config.speaker_id = speaker_id
+        if (
+            default_context_cache.config
+            and default_context_cache.config.character_config
+            and default_context_cache.config.character_config.tts_config.voicevox_tts
+        ):
+            default_context_cache.config.character_config.tts_config.voicevox_tts.speaker_id = speaker_id
+
+        if hasattr(default_context_cache.tts_engine, "speaker_id"):
+            default_context_cache.tts_engine.speaker_id = speaker_id
+
+        persisted_files = persist_voicevox_speaker_id(speaker_id)
+        logger.info(
+            f"VOICEVOX speaker changed to {speaker_id}; persisted={persisted_files}"
+        )
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "speaker_id": speaker_id,
+                "standard": speaker_id == voicevox_standard_speaker_id,
+                "persisted_files": persisted_files,
+            }
+        )
 
     @router.get("/web-tool")
     async def web_tool_redirect():
