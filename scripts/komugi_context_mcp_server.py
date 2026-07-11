@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("komugi-context")
 
-DEFAULT_CONTEXT_URL = "http://127.0.0.1:8000/api/komugi/context"
+DEFAULT_CONTEXT_URL = "http://127.0.0.1:18000/api/komugi/context"
 TIMEOUT_SECONDS = 12
 MAX_ITEMS = 8
 MAX_NOTIFICATIONS = 5
