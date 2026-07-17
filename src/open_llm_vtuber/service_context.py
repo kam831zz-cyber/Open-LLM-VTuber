@@ -23,6 +23,7 @@ from .tts.tts_factory import TTSFactory
 from .vad.vad_factory import VADFactory
 from .agent.agent_factory import AgentFactory
 from .translate.translate_factory import TranslateFactory
+from .komugi_fast_path_client import KomugiFastPathClient, KomugiFastPathConfig
 
 from .config_manager import (
     Config,
@@ -54,6 +55,7 @@ class ServiceContext:
         # translate_engine can be none if translation is disabled
         self.vad_engine: VADInterface | None = None
         self.translate_engine: TranslateInterface | None = None
+        self.komugi_fast_path_client: KomugiFastPathClient | None = None
 
         self.mcp_server_registery: ServerRegistry | None = None
         self.tool_adapter: ToolAdapter | None = None
@@ -232,6 +234,7 @@ class ServiceContext:
         self.vad_engine = vad_engine
         self.agent_engine = agent_engine
         self.translate_engine = translate_engine
+        self.init_komugi_fast_path()
         # Load potentially shared components by reference
         self.mcp_server_registery = mcp_server_registery
         self.tool_adapter = tool_adapter
@@ -305,6 +308,7 @@ class ServiceContext:
         self.init_translate(
             config.character_config.tts_preprocessor_config.translator_config
         )
+        self.init_komugi_fast_path()
 
         # store typed config references
         self.config = config
@@ -430,6 +434,25 @@ class ServiceContext:
             )
         else:
             logger.info("Translation already initialized with the same config.")
+
+    def init_komugi_fast_path(self) -> None:
+        settings = getattr(self.system_config, "komugi_fast_path", None)
+        character_enabled = bool(
+            getattr(self.character_config, "komugi_fast_path_enabled", False)
+        )
+        enabled = bool(getattr(settings, "enabled", False)) and character_enabled
+        self.komugi_fast_path_client = KomugiFastPathClient(
+            KomugiFastPathConfig(
+                enabled=enabled,
+                base_url=str(
+                    getattr(settings, "base_url", "http://127.0.0.1:18000")
+                ),
+                timeout_seconds=float(getattr(settings, "timeout_seconds", 1.5)),
+                performance_record_enabled=bool(
+                    getattr(settings, "performance_record_enabled", True)
+                ),
+            )
+        )
 
     # ==== utils
 

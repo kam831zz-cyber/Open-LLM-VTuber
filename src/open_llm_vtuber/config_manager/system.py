@@ -4,6 +4,13 @@ from typing import Dict, ClassVar
 from .i18n import I18nMixin, Description
 
 
+class KomugiFastPathSettings(I18nMixin):
+    enabled: bool = Field(False, alias="enabled")
+    base_url: str = Field("http://127.0.0.1:18000", alias="base_url")
+    timeout_seconds: float = Field(1.5, alias="timeout_seconds")
+    performance_record_enabled: bool = Field(True, alias="performance_record_enabled")
+
+
 class SystemConfig(I18nMixin):
     """System configuration settings."""
 
@@ -14,6 +21,10 @@ class SystemConfig(I18nMixin):
     default_character_config: str = Field("", alias="default_character_config")
     tool_prompts: Dict[str, str] = Field(..., alias="tool_prompts")
     enable_proxy: bool = Field(False, alias="enable_proxy")
+    komugi_fast_path: KomugiFastPathSettings = Field(
+        default_factory=KomugiFastPathSettings,
+        alias="komugi_fast_path",
+    )
 
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
         "conf_version": Description(en="Configuration version", zh="配置文件版本"),

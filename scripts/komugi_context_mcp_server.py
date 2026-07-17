@@ -204,11 +204,18 @@ def fetch_komugi_context(url: str = DEFAULT_CONTEXT_URL) -> str:
 def get_komugi_context() -> str:
     """Get a compact read-only status summary from Home AI Command Center.
 
-    Always use this tool first when the user asks about garbage collection
-    (including today/tomorrow), notifications, weather, Command Center status,
-    registered home apps, bridge status, connection status, VOICEVOX, Ollama,
-    Japan Monitor, or what household/system state is currently known.
-    Answer from the returned context when it contains the requested fact.
+    Use this tool when the user asks about garbage collection (including
+    today/tomorrow), notifications, Command Center status, registered home apps,
+    bridge status, connection status, VOICEVOX, Ollama, Japan Monitor, Home
+    Assistant, or what household/system state is currently known.
+
+    Do not use this tool for weather lifestyle decisions such as today's weather,
+    whether an umbrella is needed, whether laundry can be dried outside, heat/cold
+    caution, UV/wind caution, or good outing times. For those current-location
+    weather questions, use get_komugi_weather_advice instead.
+
+    Answer from the returned context when it contains the requested non-weather
+    household/system fact.
     Do not tell the user to use get_komugi_context; call this tool yourself
     before answering those household questions.
     Do not invent garbage weekday rules or household state that is absent from

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import time
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict
@@ -26,6 +27,12 @@ class TTSTaskManager:
         # Counter for maintaining order
         self._sequence_counter = 0
         self._next_sequence_to_send = 0
+        self.question_start: Optional[float] = None
+        self.voicevox_generation_ms: Optional[int] = None
+        self.audio_start_ms: Optional[int] = None
+        self.tts_queue_wait_ms: Optional[int] = None
+        self.audio_payload_prepare_ms: Optional[int] = None
+        self.audio_payload_send_ms: Optional[int] = None
 
     async def speak(
         self,
@@ -77,6 +84,7 @@ class TTSTaskManager:
             )
 
         # Create and queue the TTS task
+        queued_at = time.perf_counter()
         task = asyncio.create_task(
             self._process_tts(
                 tts_text=tts_text,
@@ -85,6 +93,7 @@ class TTSTaskManager:
                 live2d_model=live2d_model,
                 tts_engine=tts_engine,
                 sequence_number=current_sequence,
+                queued_at=queued_at,
             )
         )
         self.task_list.append(task)
@@ -105,7 +114,23 @@ class TTSTaskManager:
                 # Send payloads in order
                 while self._next_sequence_to_send in buffered_payloads:
                     next_payload = buffered_payloads.pop(self._next_sequence_to_send)
+                    send_start = time.perf_counter()
                     await websocket_send(json.dumps(next_payload))
+                    send_elapsed = _elapsed_ms(send_start)
+                    self.audio_payload_send_ms = (
+                        self.audio_payload_send_ms or 0
+                    ) + send_elapsed
+                    logger.info(
+                        "TTS websocket timing: "
+                        f"sequence={self._next_sequence_to_send} "
+                        f"audio_payload_send_ms={send_elapsed}"
+                    )
+                    if (
+                        self.question_start is not None
+                        and self.audio_start_ms is None
+                        and next_payload.get("audio")
+                    ):
+                        self.audio_start_ms = _elapsed_ms(self.question_start)
                     self._next_sequence_to_send += 1
 
                 self._payload_queue.task_done()
@@ -135,15 +160,42 @@ class TTSTaskManager:
         live2d_model: Live2dModel,
         tts_engine: TTSInterface,
         sequence_number: int,
+        queued_at: float,
     ) -> None:
         """Process TTS generation and queue the result for ordered delivery"""
         audio_file_path = None
         try:
+            queue_wait_ms = _elapsed_ms(queued_at)
+            self.tts_queue_wait_ms = (self.tts_queue_wait_ms or 0) + queue_wait_ms
+            generate_start = time.perf_counter()
             audio_file_path = await self._generate_audio(tts_engine, tts_text)
+            generate_elapsed = _elapsed_ms(generate_start)
+            voicevox_timing = _pop_voicevox_timing(tts_engine, audio_file_path)
+            voicevox_generation_ms = voicevox_timing.get(
+                "voicevox_generation_ms", generate_elapsed
+            )
+            self.voicevox_generation_ms = (
+                self.voicevox_generation_ms or 0
+            ) + voicevox_generation_ms
+            payload_start = time.perf_counter()
             payload = prepare_audio_payload(
                 audio_path=audio_file_path,
                 display_text=display_text,
                 actions=actions,
+            )
+            payload_prepare_ms = _elapsed_ms(payload_start)
+            self.audio_payload_prepare_ms = (
+                self.audio_payload_prepare_ms or 0
+            ) + payload_prepare_ms
+            logger.info(
+                "TTS timing: "
+                f"sequence={sequence_number} "
+                f"text_length={len(tts_text or '')} "
+                f"queue_wait_ms={queue_wait_ms} "
+                f"generate_audio_elapsed_ms={generate_elapsed} "
+                f"voicevox_generation_ms={voicevox_generation_ms} "
+                f"audio_payload_prepare_ms={payload_prepare_ms} "
+                f"voicevox_timing={voicevox_timing}"
             )
             # Queue the payload with its sequence number
             await self._payload_queue.put((payload, sequence_number))
@@ -166,10 +218,19 @@ class TTSTaskManager:
     async def _generate_audio(self, tts_engine: TTSInterface, text: str) -> str:
         """Generate audio file from text"""
         logger.debug(f"🏃Generating audio for '''{text}'''...")
-        return await tts_engine.async_generate_audio(
-            text=text,
-            file_name_no_ext=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}",
-        )
+        start = time.perf_counter()
+        try:
+            audio_file_path = await tts_engine.async_generate_audio(
+                text=text,
+                file_name_no_ext=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}",
+            )
+            return audio_file_path
+        finally:
+            elapsed = _elapsed_ms(start)
+            logger.info(
+                "TTS generate timing: "
+                f"generate_audio_elapsed_ms={elapsed}"
+            )
 
     def clear(self) -> None:
         """Clear all pending tasks and reset state"""
@@ -178,5 +239,19 @@ class TTSTaskManager:
             self._sender_task.cancel()
         self._sequence_counter = 0
         self._next_sequence_to_send = 0
+        self.tts_queue_wait_ms = None
+        self.audio_payload_prepare_ms = None
+        self.audio_payload_send_ms = None
         # Create a new queue to clear any pending items
         self._payload_queue = asyncio.Queue()
+
+
+def _elapsed_ms(start: float) -> int:
+    return max(0, round((time.perf_counter() - start) * 1000))
+
+
+def _pop_voicevox_timing(tts_engine: TTSInterface, audio_file_path: str | None) -> Dict:
+    timing_by_file = getattr(tts_engine, "timing_by_file", None)
+    if isinstance(timing_by_file, dict) and audio_file_path:
+        return timing_by_file.pop(audio_file_path, {}) or {}
+    return getattr(tts_engine, "last_timing", {}) or {}

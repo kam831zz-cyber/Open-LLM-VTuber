@@ -1,20 +1,41 @@
 {
-    "mcp_servers": {
-      "time": {
-        "command": "uvx",
-        "args": ["mcp-server-time", "--local-timezone=Asia/Shanghai"]
-      },
-      "ddg-search": {
-        "command": "uvx",
-        "args": ["duckduckgo-mcp-server"]
-      },
-      "komugi-context": {
-        "command": "uv",
-        "args": [
-          "run",
-          "python",
-          "scripts/komugi_context_mcp_server.py"
-        ]
-      }
+  "mcp_servers": {
+    "time": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-time",
+        "--local-timezone=Asia/Shanghai"
+      ]
+    },
+    "ddg-search": {
+      "command": "uvx",
+      "args": [
+        "duckduckgo-mcp-server"
+      ]
+    },
+    "weather": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "scripts/weather_mcp_server.py"
+      ]
+    },
+    "komugi-context": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "scripts/komugi_context_mcp_server.py"
+      ]
+    },
+    "komugi-weather-ai": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "scripts/komugi_weather_ai_mcp_server.py"
+      ]
     }
+  }
 }
