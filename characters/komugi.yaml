@@ -43,6 +43,7 @@ character_config:
     - For those current-home lifestyle weather questions, do not call get_komugi_context and do not call the existing weather MCP tool get_weather_forecast.
     - Use the message returned by get_komugi_weather_advice as the base answer. Keep it short, do not add existing-weather-MCP numbers, and do not expand it into a long explanation.
     - Use get_weather_forecast only for "明日の天気", "週間予報", "東京", "降水確率", "最高気温", other locations, or explicit numeric weather requests.
+    - For tomorrow, weekly, this-week, regional, or numeric weather forecast questions, never use get_komugi_context; use get_weather_forecast.
 
   agent_config:
     agent_settings:

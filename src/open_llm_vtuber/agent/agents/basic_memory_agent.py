@@ -303,10 +303,7 @@ class BasicMemoryAgent(AgentInterface):
         keywords = [
             "ゴミ",
             "ごみ",
-            "明日",
-            "今日",
             "通知",
-            "天気",
             "command center",
             "home assistant",
             "homeassistant",
@@ -402,6 +399,108 @@ class BasicMemoryAgent(AgentInterface):
         return any(keyword in text_prompt for keyword in temporal_keywords) and any(
             keyword in text_prompt for keyword in temporal_context_keywords
         )
+
+
+    def _build_weather_forecast_request(
+        self, input_data: BatchInput
+    ) -> Optional[Dict[str, str]]:
+        """Return a deterministic weather MCP request for forecast questions."""
+        if not (self._use_mcpp and self._tool_manager and self._tool_executor):
+            return None
+        if not self._tool_manager.get_tool("get_weather_forecast"):
+            return None
+
+        text_prompt = self._to_text_prompt(input_data).lower()
+        if not text_prompt:
+            return None
+
+        weather_keywords = [
+            "weather",
+            "forecast",
+            "\u5929\u6c17",
+            "\u4e88\u5831",
+            "\u964d\u6c34\u78ba\u7387",
+            "\u6700\u9ad8\u6c17\u6e29",
+            "\u6700\u4f4e\u6c17\u6e29",
+            "\u9031\u9593",
+            "\u4eca\u9031",
+            "\u4e00\u9031\u9593",
+        ]
+        if not any(keyword in text_prompt for keyword in weather_keywords):
+            return None
+
+        tomorrow_keywords = ["tomorrow", "\u660e\u65e5", "\u3042\u3057\u305f"]
+        weekly_keywords = ["weekly", "this week", "\u9031\u9593", "\u4eca\u9031", "\u4e00\u9031\u9593"]
+        numeric_keywords = ["\u964d\u6c34\u78ba\u7387", "\u6700\u9ad8\u6c17\u6e29", "\u6700\u4f4e\u6c17\u6e29"]
+        regional_locations = [
+            ("tokyo", "\u6771\u4eac"),
+            ("\u6771\u4eac\u90fd", "\u6771\u4eac"),
+            ("\u6771\u4eac", "\u6771\u4eac"),
+            ("otawara", "\u5927\u7530\u539f"),
+            ("\u5927\u7530\u539f\u5e02", "\u5927\u7530\u539f"),
+            ("\u5927\u7530\u539f", "\u5927\u7530\u539f"),
+            ("nasushiobara", "\u90a3\u9808\u5869\u539f"),
+            ("\u90a3\u9808\u5869\u539f\u5e02", "\u90a3\u9808\u5869\u539f"),
+            ("\u90a3\u9808\u5869\u539f", "\u90a3\u9808\u5869\u539f"),
+        ]
+
+        is_tomorrow = any(keyword in text_prompt for keyword in tomorrow_keywords)
+        is_weekly = any(keyword in text_prompt for keyword in weekly_keywords)
+        is_numeric = any(keyword in text_prompt for keyword in numeric_keywords)
+        location = "\u5927\u7530\u539f"
+        is_regional = False
+        for marker, resolved in regional_locations:
+            if marker in text_prompt:
+                location = resolved
+                is_regional = True
+                break
+
+        # Generic local "today's weather" is handled by the Fast Path before this agent.
+        # Only forecast/detail questions are prefetched here.
+        if not (is_tomorrow or is_weekly or is_regional or is_numeric):
+            return None
+
+        day = "weekly" if is_weekly else "tomorrow" if is_tomorrow else "today"
+        return {"location": location, "day": day}
+
+    async def _prefetch_weather_forecast(
+        self, location: str, day: str
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Run get_weather_forecast before the LLM for forecast questions."""
+        tool_id = f"prefetch_weather_{uuid.uuid4().hex[:8]}"
+        tool_call = {
+            "id": tool_id,
+            "name": "get_weather_forecast",
+            "input": {"location": location, "day": day},
+        }
+        tool_executor_iterator = self._tool_executor.execute_tools(
+            tool_calls=[tool_call],
+            caller_mode="OpenAI",
+        )
+        forecast_text = ""
+
+        async for update in tool_executor_iterator:
+            if update.get("type") == "final_tool_results":
+                results = update.get("results", [])
+                for result in results:
+                    if result.get("tool_call_id") == tool_id:
+                        forecast_text = str(result.get("content", ""))
+                continue
+
+            if (
+                update.get("type") == "tool_call_status"
+                and update.get("tool_name") == "get_weather_forecast"
+                and update.get("status") == "completed"
+            ):
+                forecast_text = str(update.get("content", ""))
+
+            yield update
+
+        if forecast_text:
+            yield {
+                "type": "weather_forecast_prefetch_result",
+                "content": forecast_text,
+            }
 
     async def _prefetch_komugi_context(
         self,
@@ -892,6 +991,27 @@ class BasicMemoryAgent(AgentInterface):
                     logger.warning(
                         f"No tools available/formatted for '{tool_mode}' mode, despite MCP being enabled."
                     )
+
+            weather_request = self._build_weather_forecast_request(input_data)
+            if weather_request:
+                logger.info(
+                    "Prefetching weather forecast before forecast/detail reply: "
+                    f"location={weather_request['location']} day={weather_request['day']}"
+                )
+                prefetched_weather = ""
+                async for update in self._prefetch_weather_forecast(
+                    weather_request["location"], weather_request["day"]
+                ):
+                    if update.get("type") == "weather_forecast_prefetch_result":
+                        prefetched_weather = update.get("content", "")
+                    else:
+                        yield update
+
+                if prefetched_weather:
+                    logger.info("Answering directly from prefetched weather forecast.")
+                    self._add_message(prefetched_weather, "assistant")
+                    yield prefetched_weather
+                    return
 
             if self._should_prefetch_komugi_context(input_data):
                 logger.info("Prefetching Komugi context before household-state reply.")

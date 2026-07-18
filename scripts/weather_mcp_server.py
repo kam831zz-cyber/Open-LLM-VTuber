@@ -161,17 +161,34 @@ def _target_date(day: str) -> date:
 
 @mcp.tool()
 def get_weather_forecast(location: str, day: str = "today") -> str:
-    """Get a fast weather forecast from Open-Meteo.
+    """Get weather forecasts from Open-Meteo.
 
-    Use this tool for weather questions instead of web search. The location can be
-    a Japanese city or place name such as Otawara, Nasushiobara, or Tokyo. The day
-    can be today, tomorrow, Japanese today/tomorrow, or an ISO date like 2026-06-25.
+    Use this tool for tomorrow, weekly, this-week, regional, and numeric weather
+    forecast questions, including precipitation probability, high temperature,
+    low temperature, and detailed current/future weather. The location can be a
+    Japanese city or place name such as Otawara, Nasushiobara, or Tokyo. The day
+    can be today, tomorrow, weekly, Japanese today/tomorrow/week, or an ISO date
+    like 2026-06-25.
+
+    明日の天気、週間予報、今週の天気、東京など別地域の天気、
+    降水確率、最高気温、最低気温などの詳細予報は、
+    get_komugi_context ではなく get_weather_forecast を使います。
     """
     if not location or not location.strip():
         return "\u5834\u6240\u304c\u6307\u5b9a\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\u5929\u6c17\u3092\u77e5\u308a\u305f\u3044\u5e02\u533a\u753a\u6751\u540d\u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
 
     place = _find_location(location.strip())
-    target = _target_date(day)
+    normalized_day = (day or "today").strip().lower()
+    is_weekly = normalized_day in {
+        "weekly",
+        "week",
+        "this_week",
+        "this week",
+        "\u9031\u9593",
+        "\u4eca\u9031",
+        "\u4e00\u9031\u9593",
+    }
+    target = None if is_weekly else _target_date(day)
     data = _get_json(
         FORECAST_URL,
         {
@@ -193,6 +210,30 @@ def get_weather_forecast(location: str, day: str = "today") -> str:
 
     daily = data.get("daily") or {}
     dates = daily.get("time") or []
+    resolved_name = place.get("name", location)
+    admin = place.get("admin1")
+    country = place.get("country")
+    resolved = "\u3001".join(part for part in [country, admin, resolved_name] if part)
+
+    if is_weekly:
+        if not dates:
+            return f"{resolved} \u306e\u9031\u9593\u5929\u6c17\u4e88\u5831\u306f\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002"
+        lines = [f"{resolved} \u306e\u9031\u9593\u5929\u6c17\u4e88\u5831:"]
+        for index, forecast_date in enumerate(dates[:7]):
+            code = (daily.get("weather_code") or [None] * len(dates))[index]
+            weather = WEATHER_CODES.get(code, f"\u5929\u6c17\u30b3\u30fc\u30c9 {code}")
+            max_temp = (daily.get("temperature_2m_max") or [None] * len(dates))[index]
+            min_temp = (daily.get("temperature_2m_min") or [None] * len(dates))[index]
+            precip_prob = (daily.get("precipitation_probability_max") or [None] * len(dates))[index]
+            precip_sum = (daily.get("precipitation_sum") or [None] * len(dates))[index]
+            lines.append(
+                f"{forecast_date}: {weather}\u3002"
+                f"\u6700\u9ad8\u6c17\u6e29 {max_temp}\u2103\u3001\u6700\u4f4e\u6c17\u6e29 {min_temp}\u2103\u3002"
+                f"\u6700\u5927\u964d\u6c34\u78ba\u7387 {precip_prob}%\u3001\u964d\u6c34\u91cf {precip_sum}mm\u3002"
+            )
+        lines.append("\u30c7\u30fc\u30bf\u63d0\u4f9b: Open-Meteo\u3002")
+        return "\n".join(lines)
+
     target_str = target.isoformat()
     if target_str not in dates:
         start = dates[0] if dates else "unknown"
@@ -206,11 +247,6 @@ def get_weather_forecast(location: str, day: str = "today") -> str:
     min_temp = daily.get("temperature_2m_min", [None])[index]
     precip_prob = daily.get("precipitation_probability_max", [None])[index]
     precip_sum = daily.get("precipitation_sum", [None])[index]
-
-    resolved_name = place.get("name", location)
-    admin = place.get("admin1")
-    country = place.get("country")
-    resolved = "\u3001".join(part for part in [country, admin, resolved_name] if part)
 
     return (
         f"{resolved} \u306e {target_str} \u306e\u5929\u6c17\u4e88\u5831: {weather}\u3002"
