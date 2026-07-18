@@ -324,6 +324,85 @@ class BasicMemoryAgent(AgentInterface):
         ]
         return any(keyword in text_prompt for keyword in keywords)
 
+    def _should_enable_mcp_tools(self, input_data: BatchInput) -> bool:
+        """Return True only when the current turn looks like it can benefit from MCP tools."""
+        if not (self._use_mcpp and self._tool_manager and self._tool_executor):
+            return False
+
+        text_prompt = self._to_text_prompt(input_data).lower()
+        if not text_prompt:
+            return False
+
+        strong_tool_keywords = [
+            "command center",
+            "home assistant",
+            "homeassistant",
+            "voicevox",
+            "ollama",
+            "japan monitor",
+            "mcp",
+            "api",
+            "status",
+            "error",
+            "log",
+            "search",
+            "lookup",
+            "weather",
+            "garbage",
+            "notification",
+            "device",
+            "sensor",
+            "天気",
+            "ゴミ",
+            "ごみ",
+            "通知",
+            "検索",
+            "調べ",
+            "探し",
+            "時刻",
+            "何時",
+            "状態",
+            "接続",
+            "操作",
+            "家電",
+            "アプリ",
+            "傘",
+            "洗濯",
+            "外干し",
+            "外出",
+            "週間",
+            "今週",
+            "降水確率",
+            "最高気温",
+            "最低気温",
+        ]
+        if any(keyword in text_prompt for keyword in strong_tool_keywords):
+            return True
+
+        temporal_keywords = [
+            "今日",
+            "明日",
+            "today",
+            "tomorrow",
+            "date",
+        ]
+        temporal_context_keywords = [
+            "雨",
+            "暑い",
+            "寒い",
+            "気温",
+            "予報",
+            "天候",
+            "曜日",
+            "何日",
+            "何曜日",
+            "予定",
+            "スケジュール",
+        ]
+        return any(keyword in text_prompt for keyword in temporal_keywords) and any(
+            keyword in text_prompt for keyword in temporal_context_keywords
+        )
+
     async def _prefetch_komugi_context(
         self,
     ) -> AsyncIterator[Dict[str, Any]]:
@@ -853,6 +932,15 @@ class BasicMemoryAgent(AgentInterface):
                         self._add_message(direct_answer, "assistant")
                         yield direct_answer
                         return
+
+            if self._use_mcpp and tool_mode and not self._should_enable_mcp_tools(
+                input_data
+            ):
+                logger.info(
+                    "Skipping MCP tools for this turn; input does not require external context."
+                )
+                tools = None
+                tool_mode = None
 
             if self._use_mcpp and tool_mode == "Claude":
                 logger.debug(
