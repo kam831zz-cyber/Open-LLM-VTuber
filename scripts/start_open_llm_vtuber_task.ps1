@@ -52,6 +52,30 @@ if (Test-PortOpen -Address $HostAddress -PortNumber $Port) {
   exit 0
 }
 
+$AsrCheckScript = Join-Path $Root "scripts\check_windows_asr_compat.ps1"
+if (Test-Path -LiteralPath $AsrCheckScript) {
+  Write-RunLog "asr_check=start"
+  try {
+    $asrCheckOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $AsrCheckScript 2>&1
+    $asrCheckExitCode = $LASTEXITCODE
+    foreach ($line in $asrCheckOutput) {
+      Write-Host $line
+      Write-RunLog "asr_check_output=$line"
+    }
+    Write-RunLog "asr_check_exit_code=$asrCheckExitCode"
+    if ($asrCheckExitCode -ne 0) {
+      Write-Warning "ASR compatibility check returned exit code $asrCheckExitCode. Startup will continue."
+      Write-RunLog "asr_check_warning=continuing_startup"
+    }
+  } catch {
+    Write-Warning "ASR compatibility check failed: $($_.Exception.Message). Startup will continue."
+    Write-RunLog "asr_check_error=$($_.Exception.Message)"
+  }
+} else {
+  Write-Warning "ASR compatibility check script not found: $AsrCheckScript. Startup will continue."
+  Write-RunLog "asr_check=missing"
+}
+
 if (Test-Path -LiteralPath (Join-Path $Root ".venv\Lib\site-packages\onnxruntime\capi")) {
   $env:PATH = (Join-Path $Root ".venv\Lib\site-packages\onnxruntime\capi") + ";" + $env:PATH
 }
