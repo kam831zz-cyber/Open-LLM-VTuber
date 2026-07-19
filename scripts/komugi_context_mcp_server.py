@@ -145,6 +145,57 @@ def _format_bridge(data: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _format_local_status(data: dict[str, Any]) -> list[str]:
+    local_status = data.get("local_status") or {}
+    if not isinstance(local_status, dict):
+        return []
+
+    area = local_status.get("area") or {}
+    overall_risk = local_status.get("overall_risk") or {}
+    earthquake = local_status.get("earthquake") or {}
+    tsunami = local_status.get("tsunami") or {}
+    typhoon = local_status.get("typhoon") or {}
+    river = local_status.get("river") or {}
+    heavy_rain = local_status.get("heavy_rain") or {}
+    weather_alerts = local_status.get("weather_alerts") or []
+
+    area_name = " ".join(
+        part
+        for part in [
+            _as_text(area.get("prefecture"), ""),
+            _as_text(area.get("city"), ""),
+        ]
+        if part
+    )
+    message = _as_text(local_status.get("message"), "")
+    risk_level = _as_text(overall_risk.get("level"), "")
+    risk_summary = _as_text(overall_risk.get("summary"), "")
+
+    lines = [
+        f"- available: {bool(local_status.get('available'))}",
+    ]
+    if area_name:
+        lines.append(f"- 対象地域: {area_name}")
+    if message:
+        lines.append(f"- 状況: {message}")
+    if risk_level:
+        lines.append(f"- risk_level: {risk_level}")
+    if risk_summary and risk_summary != message:
+        lines.append(f"- risk_summary: {risk_summary}")
+
+    lines.extend(
+        [
+            f"- 気象警報注意報: {len(weather_alerts)}件",
+            f"- 地震: active={bool(earthquake.get('active'))}; level={_as_text(earthquake.get('level'))}; count={_as_text(earthquake.get('count'), '0')}",
+            f"- 津波: active={bool(tsunami.get('active'))}; level={_as_text(tsunami.get('level'))}; count={_as_text(tsunami.get('count'), '0')}",
+            f"- 台風: active={bool(typhoon.get('active'))}; level={_as_text(typhoon.get('level'))}; count={_as_text(typhoon.get('count'), '0')}",
+            f"- 河川: active={bool(river.get('active'))}; level={_as_text(river.get('level'))}; count={_as_text(river.get('count'), '0')}",
+            f"- 大雨: active={bool(heavy_rain.get('active'))}; level={_as_text(heavy_rain.get('level'))}; count={_as_text(heavy_rain.get('count'), '0')}",
+        ]
+    )
+    return lines
+
+
 def _format_response_rules(data: dict[str, Any]) -> list[str]:
     rules = data.get("response_rules") or []
     lines = [f"- {rule}" for rule in rules[:MAX_ITEMS]]
@@ -169,6 +220,7 @@ def _format_context(data: dict[str, Any]) -> str:
         _section("apps", _format_apps(data)),
         _section("system", _format_system(data)),
         _section("bridge", _format_bridge(data)),
+        _section("地域防災", _format_local_status(data)),
         _section("response_rules", _format_response_rules(data)),
     ]
     text = "\n\n".join(sections)
@@ -208,6 +260,10 @@ def get_komugi_context() -> str:
     today/tomorrow), notifications, Command Center status, registered home apps,
     bridge status, connection status, VOICEVOX, Ollama, Japan Monitor, Home
     Assistant, or what household/system state is currently known.
+    Also use it for registered-area local disaster/safety status from Japan
+    Monitor, including weather warnings/advisories, earthquakes, tsunami,
+    typhoons, rivers/heavy rain, regional risk, or questions such as whether
+    this area is currently safe.
 
     Do not use this tool for weather lifestyle decisions such as today's weather,
     whether an umbrella is needed, whether laundry can be dried outside, heat/cold
@@ -215,7 +271,7 @@ def get_komugi_context() -> str:
     weather questions, use get_komugi_weather_advice instead.
 
     Answer from the returned context when it contains the requested non-weather
-    household/system fact.
+    household/system or registered-area local disaster fact.
     Do not tell the user to use get_komugi_context; call this tool yourself
     before answering those household questions.
     Do not invent garbage weekday rules or household state that is absent from

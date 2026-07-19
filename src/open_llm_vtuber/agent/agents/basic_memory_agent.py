@@ -300,6 +300,9 @@ class BasicMemoryAgent(AgentInterface):
         if not text_prompt:
             return False
 
+        if self._is_local_disaster_question(text_prompt):
+            return True
+
         keywords = [
             "ゴミ",
             "ごみ",
@@ -321,6 +324,52 @@ class BasicMemoryAgent(AgentInterface):
         ]
         return any(keyword in text_prompt for keyword in keywords)
 
+    def _is_local_disaster_question(self, text_prompt: str) -> bool:
+        """Return True for registered-area disaster and safety-status questions."""
+        disaster_keywords = [
+            "地域防災",
+            "防災",
+            "警報",
+            "注意報",
+            "災害",
+            "地震",
+            "津波",
+            "台風",
+            "河川",
+            "大雨",
+            "リスク",
+            "登録地域",
+            "japan monitor",
+            "ジャパンモニター",
+        ]
+        if any(keyword in text_prompt for keyword in disaster_keywords):
+            return True
+
+        local_keywords = [
+            "この辺",
+            "このへん",
+            "この地域",
+            "近く",
+            "周辺",
+            "近所",
+            "川",
+            "家の地域",
+            "家の登録地域",
+        ]
+        safety_keywords = [
+            "大丈夫",
+            "安全",
+            "危ない",
+            "危険",
+            "状況",
+            "確認",
+            "出てる",
+            "来てる",
+        ]
+        return any(keyword in text_prompt for keyword in local_keywords) and any(
+            keyword in text_prompt for keyword in safety_keywords
+        )
+
     def _should_enable_mcp_tools(self, input_data: BatchInput) -> bool:
         """Return True only when the current turn looks like it can benefit from MCP tools."""
         if not (self._use_mcpp and self._tool_manager and self._tool_executor):
@@ -329,6 +378,9 @@ class BasicMemoryAgent(AgentInterface):
         text_prompt = self._to_text_prompt(input_data).lower()
         if not text_prompt:
             return False
+
+        if self._is_local_disaster_question(text_prompt):
+            return True
 
         strong_tool_keywords = [
             "command center",
@@ -556,8 +608,9 @@ class BasicMemoryAgent(AgentInterface):
 
     def _extract_context_line(self, context_text: str, label: str) -> str:
         for line in context_text.splitlines():
-            if line.startswith(f"- {label}:"):
-                return line[2:].strip()
+            stripped = line.strip()
+            if stripped.startswith(f"- {label}:"):
+                return stripped[2:].strip()
         return ""
 
     def _context_line_is_ok(self, line: str) -> bool:
@@ -616,6 +669,22 @@ class BasicMemoryAgent(AgentInterface):
                 count = len(notifications)
                 return f"通知は{count}件あります。詳しくはCommand Centerで確認できます。"
             return "通知は確認できません。"
+
+        if self._is_local_disaster_question(text_prompt):
+            local_status = self._extract_context_line(context_text, "地域防災")
+            status_message = self._extract_context_line(context_text, "状況")
+            area = self._extract_context_line(context_text, "対象地域")
+            risk_level = self._extract_context_line(context_text, "risk_level")
+            if status_message or local_status:
+                message = (status_message or local_status).split(":", 1)[1].strip()
+                if area:
+                    area_name = area.split(":", 1)[1].strip()
+                    return f"{area_name}の地域防災情報です。{message}"
+                return message
+            if risk_level:
+                level = risk_level.split(":", 1)[1].strip()
+                return f"地域防災情報は取得できました。現在のリスクは{level}です。"
+            return "地域防災情報は、Command Centerのcontextでは確認できません。"
 
         if (
             "home assistant" in text_prompt
