@@ -49,12 +49,12 @@ class KomugiFastPathClient:
             logger.warning(
                 f"Komugi Weather AI fallback intent={weather_intent} error={weather_result.error}"
             )
-            if weather_intent != "weather_today":
+            if weather_intent not in {"weather_today", "weather_tomorrow", "weather_weekly"}:
                 weather_result.handled = True
                 weather_result.response = weather_result.response or _jp(r"\u5929\u6c17\u60c5\u5831\u3092\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002")
                 return weather_result
 
-        weather_fallback_result = weather_result if weather_intent == "weather_today" and 'weather_result' in locals() else None
+        weather_fallback_result = weather_result if weather_intent in {"weather_today", "weather_tomorrow", "weather_weekly"} and 'weather_result' in locals() else None
         if _should_skip_weather_fast_path(text):
             return KomugiFastPathResult(
                 handled=False,
@@ -108,6 +108,7 @@ class KomugiFastPathClient:
             response = await asyncio.to_thread(
                 requests.get,
                 self._url("/api/komugi/ai/weather"),
+                params={"period": _weather_period_for_intent(intent)},
                 timeout=(0.5, min(8.0, max(5.0, self.config.timeout_seconds))),
             )
             response.raise_for_status()
@@ -236,16 +237,22 @@ def _jp(escaped: str) -> str:
     return escaped.encode("ascii").decode("unicode_escape")
 
 
+def _weather_period_for_intent(intent: str) -> str:
+    if intent == "weather_tomorrow":
+        return "tomorrow"
+    if intent == "weather_weekly":
+        return "weekly"
+    return "today"
+
+
 def _detect_weather_ai_intent(text: str) -> str | None:
     normalized = "".join(str(text or "").split())
     if not normalized:
         return None
 
-    detailed_markers = tuple(
+    detail_or_location_markers = tuple(
         _jp(value)
         for value in (
-            r"\u660e\u65e5",  # ??
-            r"\u9031\u9593",  # ??
             r"\u6771\u4eac",  # ??
             r"\u5927\u962a",  # ??
             r"\u5225\u5730\u57df",  # ???
@@ -257,8 +264,21 @@ def _detect_weather_ai_intent(text: str) -> str | None:
             r"\u6c17\u6e29\u306f",  # ???
         )
     )
-    if any(marker in normalized for marker in detailed_markers):
+    if any(marker in normalized for marker in detail_or_location_markers):
         return None
+
+    if _jp(r"\u5929\u6c17") in normalized and any(
+        marker in normalized
+        for marker in (
+            _jp(r"\u9031\u9593"),  # weekly
+            _jp(r"\u4eca\u9031"),  # this week
+            _jp(r"\u4e00\u9031\u9593"),  # one week
+        )
+    ):
+        return "weather_weekly"
+
+    if _jp(r"\u5929\u6c17") in normalized and _jp(r"\u660e\u65e5") in normalized:
+        return "weather_tomorrow"
 
     if _jp(r"\u5098") in normalized and any(
         marker in normalized
