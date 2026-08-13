@@ -1,5 +1,6 @@
 """Constructs prompts for servers and tools, formats tool information for OpenAI API."""
 
+import asyncio
 from typing import Dict, Optional, List, Tuple, Any
 from loguru import logger
 
@@ -30,57 +31,55 @@ class ToolAdapter:
 
         logger.debug(f"MC: Fetching tool info for enabled servers: {enabled_servers}")
 
-        # Use a single client instance for efficiency
-        async with MCPClient(self.server_registery) as client:
-            for server_name in enabled_servers:
-                if server_name not in self.server_registery.servers:
-                    logger.warning(
-                        f"MC: Enabled server '{server_name}' not found in Server Manager. Skipping."
-                    )
-                    continue
+        tasks = []
+        for server_name in enabled_servers:
+            if server_name not in self.server_registery.servers:
+                logger.warning(
+                    f"MC: Enabled server '{server_name}' not found in Server Manager. Skipping."
+                )
+                continue
+            tasks.append(self._fetch_server_tool_info(server_name))
 
-                try:
-                    servers_info[server_name] = {}
-                    tools = await client.list_tools(server_name)
-                    logger.debug(
-                        f"MC: Found {len(tools)} tools on server '{server_name}'"
-                    )
-                    for tool in tools:
-                        servers_info[server_name][tool.name] = {}
-                        tool_info = servers_info[server_name][tool.name]
-                        tool_info["description"] = tool.description
-                        tool_info["parameters"] = tool.inputSchema.get("properties", {})
-                        tool_info["required"] = tool.inputSchema.get("required", [])
-
-                        # Store the tool info in FormattedTool format
-                        formatted_tools[tool.name] = FormattedTool(
-                            input_schema=tool.inputSchema,
-                            related_server=server_name,
-                            description=tool.description,
-                            # Generic schema will be generated later if needed
-                            generic_schema=None,
-                        )
-                except (ValueError, RuntimeError, ConnectionError) as e:
-                    logger.error(
-                        f"MC: Failed to get info for server '{server_name}': {e}"
-                    )
-                    if (
-                        server_name not in servers_info
-                    ):  # Ensure entry exists even on error
-                        servers_info[server_name] = {}
-                    continue  # Continue to next server
-                except Exception as e:
-                    logger.error(
-                        f"MC: Unexpected error for server '{server_name}': {e}"
-                    )
-                    if server_name not in servers_info:
-                        servers_info[server_name] = {}
-                    continue  # Continue to next server
+        for server_name, server_tools, server_formatted_tools in await asyncio.gather(
+            *tasks
+        ):
+            servers_info[server_name] = server_tools
+            formatted_tools.update(server_formatted_tools)
 
         logger.debug(
             f"MC: Finished fetching tool info. Found {len(formatted_tools)} tools across enabled servers."
         )
         return servers_info, formatted_tools
+
+    async def _fetch_server_tool_info(
+        self, server_name: str
+    ) -> Tuple[str, Dict[str, Dict[str, Any]], Dict[str, FormattedTool]]:
+        server_tools: Dict[str, Dict[str, Any]] = {}
+        formatted_tools: Dict[str, FormattedTool] = {}
+
+        try:
+            async with MCPClient(self.server_registery) as client:
+                tools = await client.list_tools(server_name)
+                logger.debug(f"MC: Found {len(tools)} tools on server '{server_name}'")
+                for tool in tools:
+                    tool_info = {
+                        "description": tool.description,
+                        "parameters": tool.inputSchema.get("properties", {}),
+                        "required": tool.inputSchema.get("required", []),
+                    }
+                    server_tools[tool.name] = tool_info
+                    formatted_tools[tool.name] = FormattedTool(
+                        input_schema=tool.inputSchema,
+                        related_server=server_name,
+                        description=tool.description,
+                        generic_schema=None,
+                    )
+        except (ValueError, RuntimeError, ConnectionError) as e:
+            logger.error(f"MC: Failed to get info for server '{server_name}': {e}")
+        except Exception as e:
+            logger.error(f"MC: Unexpected error for server '{server_name}': {e}")
+
+        return server_name, server_tools, formatted_tools
 
     def construct_mcp_prompt_string(
         self, servers_info: Dict[str, Dict[str, str]]
@@ -218,7 +217,12 @@ class ToolAdapter:
 
     async def get_tools(
         self, enabled_servers: List[str]
-    ) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]]]:
+    ) -> Tuple[
+        str,
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        Dict[str, FormattedTool],
+    ]:
         """Run the dynamic fetching and formatting process."""
         logger.info(
             f"MC: Running dynamic tool construction for servers: {enabled_servers}"
@@ -229,4 +233,4 @@ class ToolAdapter:
         mcp_prompt_string = self.construct_mcp_prompt_string(servers_info)
         openai_tools, claude_tools = self.format_tools_for_api(formatted_tools_dict)
         logger.info("MC: Dynamic tool construction complete.")
-        return mcp_prompt_string, openai_tools, claude_tools
+        return mcp_prompt_string, openai_tools, claude_tools, formatted_tools_dict

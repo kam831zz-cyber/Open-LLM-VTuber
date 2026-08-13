@@ -159,7 +159,12 @@ class MCPClient:
         logger.info(
             f"MCPC: Closing client instance and {len(self.active_sessions)} active connections..."
         )
-        await self.exit_stack.aclose()
+        try:
+            await self.exit_stack.aclose()
+        except Exception as e:
+            if not _is_process_lookup_error(e):
+                raise
+            logger.debug("MCPC: Ignoring already-exited MCP process during close.")
         self.active_sessions.clear()
         self._list_tools_cache.clear()  # Clear cache on close
         self.exit_stack = AsyncExitStack()
@@ -193,5 +198,12 @@ class MCPClient:
 #                 print(f"Caught expected error: {e}")
 #             except Exception as e:
 #                 print(f"Caught unexpected error: {e}")
+
+
+def _is_process_lookup_error(exc: BaseException) -> bool:
+    nested = getattr(exc, "exceptions", None)
+    if nested is not None:
+        return all(_is_process_lookup_error(item) for item in nested)
+    return isinstance(exc, ProcessLookupError)
 
 #     asyncio.run(main())

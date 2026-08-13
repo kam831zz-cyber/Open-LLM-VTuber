@@ -3,6 +3,7 @@
 import shutil
 import json
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Dict, Optional, Union, Any
 from loguru import logger
@@ -86,7 +87,7 @@ class ServerRegistry:
                 args=server_details["args"],
                 env=server_details.get("env", None),
                 cwd=server_details.get("cwd", None),
-                timeout=server_details.get("timeout", None),
+                timeout=_parse_timeout(server_details.get("timeout", None)),
             )
             logger.debug(f"MCPSR: Loaded server: '{server_name}'.")
 
@@ -101,3 +102,19 @@ class ServerRegistry:
     def get_server(self, server_name: str) -> Optional[MCPServer]:
         """Get the server by name."""
         return self.servers.get(server_name, None)
+
+
+def _parse_timeout(value: Any) -> Optional[timedelta]:
+    if value is None:
+        return None
+    if isinstance(value, timedelta):
+        return value
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        logger.warning(f"MCPSR: Invalid timeout value '{value}', using default.")
+        return None
+    if seconds <= 0:
+        logger.warning(f"MCPSR: Non-positive timeout value '{value}', using default.")
+        return None
+    return timedelta(seconds=seconds)
