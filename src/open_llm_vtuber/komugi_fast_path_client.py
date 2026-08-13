@@ -16,6 +16,7 @@ class KomugiFastPathConfig:
     base_url: str = "http://127.0.0.1:18000"
     timeout_seconds: float = 1.5
     performance_record_enabled: bool = True
+    ui_event_enabled: bool = True
 
 
 @dataclass
@@ -45,6 +46,11 @@ class KomugiFastPathClient:
         if weather_intent:
             weather_result = await self._komugi_weather_ai_response(weather_intent, request_id)
             if weather_result.handled:
+                if weather_intent in {"weather_today", "weather_tomorrow", "weather_weekly"}:
+                    self.schedule_ui_event(
+                        "weather",
+                        period=_weather_period_for_intent(weather_intent),
+                    )
                 return weather_result
             logger.warning(
                 f"Komugi Weather AI fallback intent={weather_intent} error={weather_result.error}"
@@ -81,6 +87,10 @@ class KomugiFastPathClient:
                 weather_fallback_result.handled = True
                 weather_fallback_result.response = weather_fallback_result.response or _jp(r"\u5929\u6c17\u60c5\u5831\u3092\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002")
                 weather_fallback_result.http_roundtrip_ms = _elapsed_ms(start)
+                self.schedule_ui_event(
+                    "weather",
+                    period=_weather_period_for_intent(weather_intent),
+                )
                 return weather_fallback_result
             return KomugiFastPathResult(
                 handled=False,
@@ -95,6 +105,10 @@ class KomugiFastPathClient:
             weather_fallback_result.handled = True
             weather_fallback_result.response = weather_fallback_result.response or _jp(r"\u5929\u6c17\u60c5\u5831\u3092\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002")
             weather_fallback_result.http_roundtrip_ms = result.http_roundtrip_ms
+            self.schedule_ui_event(
+                "weather",
+                period=_weather_period_for_intent(weather_intent),
+            )
             return weather_fallback_result
         return result
 
@@ -174,6 +188,16 @@ class KomugiFastPathClient:
             return
         asyncio.create_task(self.record_performance(payload))
 
+    async def send_ui_event(self, view: str, period: str | None = None) -> None:
+        if not self.config.ui_event_enabled:
+            return
+        await post_komugi_ui_event(self.config.base_url, view, period)
+
+    def schedule_ui_event(self, view: str, period: str | None = None) -> None:
+        if not self.config.ui_event_enabled:
+            return
+        asyncio.create_task(self.send_ui_event(view, period))
+
     def _parse_quick_response(
         self,
         data: Any,
@@ -235,6 +259,30 @@ class KomugiFastPathClient:
 
 def _jp(escaped: str) -> str:
     return escaped.encode("ascii").decode("unicode_escape")
+
+
+async def post_komugi_ui_event(
+    base_url: str,
+    view: str,
+    period: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {"view": view}
+    if period:
+        payload["period"] = period
+    try:
+        await asyncio.to_thread(
+            requests.post,
+            _join_url(base_url, "/api/komugi/ui/event"),
+            json=payload,
+            timeout=(0.3, 1.0),
+        )
+    except Exception as exc:
+        logger.warning(f"Komugi UI event post failed: {type(exc).__name__}")
+
+
+def _join_url(base_url: str, path: str) -> str:
+    base = str(base_url or "http://127.0.0.1:18000").rstrip("/") + "/"
+    return urljoin(base, path.lstrip("/"))
 
 
 def _weather_period_for_intent(intent: str) -> str:

@@ -8,9 +8,12 @@ from typing import (
     Union,
     Optional,
 )
+import asyncio
 import uuid
 import re
+from urllib.parse import urljoin
 from loguru import logger
+import requests
 from .agent_interface import AgentInterface
 from ..output_types import SentenceOutput, DisplayText
 from ..stateless_llm.stateless_llm_interface import StatelessLLMInterface
@@ -30,6 +33,7 @@ from ...mcpp.tool_manager import ToolManager
 from ...mcpp.json_detector import StreamJSONDetector
 from ...mcpp.types import ToolCallObject
 from ...mcpp.tool_executor import ToolExecutor
+from ...komugi_fast_path_client import post_komugi_ui_event
 
 
 class BasicMemoryAgent(AgentInterface):
@@ -51,6 +55,7 @@ class BasicMemoryAgent(AgentInterface):
         tool_manager: Optional[ToolManager] = None,
         tool_executor: Optional[ToolExecutor] = None,
         mcp_prompt_string: str = "",
+        command_center_base_url: str = "http://127.0.0.1:18000",
     ):
         """Initialize agent with LLM and configuration."""
         super().__init__()
@@ -68,6 +73,7 @@ class BasicMemoryAgent(AgentInterface):
         self._tool_manager = tool_manager
         self._tool_executor = tool_executor
         self._mcp_prompt_string = mcp_prompt_string
+        self._command_center_base_url = command_center_base_url
         self._json_detector = StreamJSONDetector()
 
         self._formatted_tools_openai = []
@@ -326,9 +332,23 @@ class BasicMemoryAgent(AgentInterface):
 
     def _is_local_disaster_question(self, text_prompt: str) -> bool:
         """Return True for registered-area disaster and safety-status questions."""
-        disaster_keywords = [
+        educational_keywords = ["仕組み", "どうして", "なぜ", "理由"]
+        if any(keyword in text_prompt for keyword in educational_keywords):
+            return False
+
+        explicit_disaster_keywords = [
             "地域防災",
             "防災",
+            "災害情報",
+            "防災情報",
+            "登録地域",
+            "japan monitor",
+            "ジャパンモニター",
+        ]
+        if any(keyword in text_prompt for keyword in explicit_disaster_keywords):
+            return True
+
+        disaster_topics = [
             "警報",
             "注意報",
             "災害",
@@ -338,11 +358,34 @@ class BasicMemoryAgent(AgentInterface):
             "河川",
             "大雨",
             "リスク",
-            "登録地域",
-            "japan monitor",
-            "ジャパンモニター",
         ]
-        if any(keyword in text_prompt for keyword in disaster_keywords):
+        status_keywords = [
+            "大丈夫",
+            "安全",
+            "危ない",
+            "危険",
+            "状況",
+            "確認",
+            "出てる",
+            "出ている",
+            "ある",
+            "あった",
+            "来てる",
+            "来ている",
+            "どう",
+            "発生",
+            "起きた",
+        ]
+        if any(keyword in text_prompt for keyword in disaster_topics) and any(
+            keyword in text_prompt for keyword in status_keywords
+        ):
+            return True
+
+        municipality_keywords = ["市", "町", "村", "区"]
+        municipality_safety_keywords = ["大丈夫", "安全", "危険", "リスク"]
+        if any(keyword in text_prompt for keyword in municipality_keywords) and any(
+            keyword in text_prompt for keyword in municipality_safety_keywords
+        ):
             return True
 
         local_keywords = [
@@ -364,7 +407,9 @@ class BasicMemoryAgent(AgentInterface):
             "状況",
             "確認",
             "出てる",
+            "出ている",
             "来てる",
+            "来ている",
         ]
         return any(keyword in text_prompt for keyword in local_keywords) and any(
             keyword in text_prompt for keyword in safety_keywords
@@ -593,6 +638,50 @@ class BasicMemoryAgent(AgentInterface):
                 "content": context_text,
             }
 
+    def _schedule_komugi_ui_event(
+        self, view: str, period: str | None = None
+    ) -> None:
+        asyncio.create_task(
+            post_komugi_ui_event(self._command_center_base_url, view, period)
+        )
+
+    async def _build_local_status_fallback_answer(self, input_data: BatchInput) -> str:
+        text_prompt = self._to_text_prompt(input_data).lower()
+        if "\u5730\u9707" not in text_prompt:
+            return ""
+
+        try:
+            response = await asyncio.to_thread(
+                requests.get,
+                _join_url(self._command_center_base_url, "/api/komugi/local-status"),
+                timeout=(0.8, 12.0),
+            )
+            response.raise_for_status()
+            data = response.json()
+        except Exception as exc:
+            logger.warning(f"Komugi local-status fallback failed: {type(exc).__name__}")
+            return ""
+
+        if not isinstance(data, dict):
+            return ""
+        if data.get("available") is False:
+            return str(data.get("message") or "").strip()
+
+        earthquake = data.get("earthquake") if isinstance(data.get("earthquake"), dict) else {}
+        area = data.get("area") if isinstance(data.get("area"), dict) else {}
+        area_name = str(
+            area.get("location_name")
+            or " ".join(str(area.get(key) or "") for key in ("prefecture", "city")).strip()
+            or "\u3053\u306e\u5730\u57df"
+        )
+        if earthquake.get("active") is True:
+            top = earthquake.get("top") if isinstance(earthquake.get("top"), dict) else {}
+            summary = str(top.get("summary") or top.get("title") or "").strip()
+            if summary:
+                return f"{area_name}\u306e\u5730\u9707\u60c5\u5831\u3067\u3059\u3002{summary}"
+            return f"{area_name}\u3067\u5730\u9707\u60c5\u5831\u304c\u3042\u308a\u307e\u3059\u3002"
+        return f"\u73fe\u5728\u3001{area_name}\u306e\u5730\u9707\u60c5\u5831\u306b\u5927\u304d\u306a\u7570\u5e38\u306f\u78ba\u8a8d\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002"
+
     def _extract_context_value(self, context_text: str, label: str) -> str:
         match = re.search(rf"{re.escape(label)}:\s*([^/\n;]+)", context_text)
         return match.group(1).strip() if match else ""
@@ -612,6 +701,117 @@ class BasicMemoryAgent(AgentInterface):
             if stripped.startswith(f"- {label}:"):
                 return stripped[2:].strip()
         return ""
+
+    def _has_municipality_reference(self, text_prompt: str) -> bool:
+        return any(keyword in text_prompt for keyword in ["市", "町", "村", "区"])
+
+    def _local_disaster_topic(self, text_prompt: str) -> str:
+        if "警報" in text_prompt or "注意報" in text_prompt:
+            return "weather_alerts"
+        if "地震" in text_prompt:
+            return "earthquake"
+        if "津波" in text_prompt:
+            return "tsunami"
+        if "川" in text_prompt or "河川" in text_prompt:
+            return "river"
+        if "台風" in text_prompt:
+            return "typhoon"
+        if "大雨" in text_prompt:
+            return "heavy_rain"
+        return "overall"
+
+    def _extract_semicolon_field(self, value: str, key: str) -> str:
+        prefix = f"{key}="
+        for part in value.split(";"):
+            part = part.strip()
+            if part.startswith(prefix):
+                return part[len(prefix) :].strip()
+        return ""
+
+    def _extract_intensity_text(self, *values: str) -> str:
+        for value in values:
+            match = re.search(r"(?:\u6700\u5927)?\u9707\u5ea6\s*([0-9\uff10-\uff19]+)", value)
+            if match:
+                return f"\u9707\u5ea6{match.group(1)}"
+        return ""
+
+    def _target_city_from_context(self, context_text: str) -> str:
+        area_line = self._extract_context_line(context_text, "\u5bfe\u8c61\u5730\u57df")
+        if not area_line:
+            return "\u3053\u306e\u5730\u57df"
+        area_value = area_line.split(":", 1)[1].strip()
+        for part in reversed(area_value.split()):
+            if part.endswith(("\u5e02", "\u753a", "\u6751", "\u533a")):
+                return part
+        return area_value or "\u3053\u306e\u5730\u57df"
+
+    def _earthquake_area_matches_home(self, earthquake_area: str, context_text: str) -> bool:
+        area_line = self._extract_context_line(context_text, "\u5bfe\u8c61\u5730\u57df")
+        if not area_line or not earthquake_area:
+            return False
+        area_value = area_line.split(":", 1)[1].strip()
+        return any(part and part in earthquake_area for part in area_value.split())
+
+    def _build_earthquake_answer(self, context_text: str) -> str:
+        item_line = self._extract_context_line(context_text, "earthquake_item_1")
+        if not item_line:
+            return ""
+        value = item_line.split(":", 1)[1].strip()
+        area = self._extract_semicolon_field(value, "area")
+        title = self._extract_semicolon_field(value, "title")
+        summary = self._extract_semicolon_field(value, "summary")
+        intensity = self._extract_intensity_text(title, summary)
+        target_city = self._target_city_from_context(context_text)
+
+        if area and intensity:
+            first_sentence = f"{area}\u3067{intensity}\u306e\u5730\u9707\u304c\u3042\u308a\u307e\u3057\u305f\u3002"
+        elif area:
+            first_sentence = f"{area}\u3067\u5730\u9707\u60c5\u5831\u304c\u3042\u308a\u307e\u3059\u3002"
+        elif summary:
+            first_sentence = summary
+        else:
+            first_sentence = "\u5730\u9707\u60c5\u5831\u304c\u3042\u308a\u307e\u3059\u3002"
+
+        if self._earthquake_area_matches_home(area, context_text):
+            return f"{first_sentence}{target_city}\u5468\u8fba\u3067\u3082\u5f71\u97ff\u304c\u306a\u3044\u304b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
+        return f"{first_sentence}{target_city}\u3078\u306e\u5f71\u97ff\u306f\u73fe\u5728\u78ba\u8a8d\u3067\u304d\u3066\u3044\u307e\u305b\u3093\u3002"
+
+    def _build_local_disaster_topic_answer(
+        self, topic: str, context_text: str
+    ) -> str:
+        if topic == "weather_alerts":
+            line = self._extract_context_line(context_text, "気象警報注意報")
+            if not line:
+                return ""
+            value = line.split(":", 1)[1].strip()
+            if value.startswith("0"):
+                return "現在、この地域に気象警報・注意報は確認されていません。"
+            return f"現在、この地域に気象警報・注意報が{value}あります。"
+
+        labels = {
+            "earthquake": ("地震", "地震情報"),
+            "tsunami": ("津波", "津波情報"),
+            "river": ("河川", "河川情報"),
+            "typhoon": ("台風", "台風情報"),
+            "heavy_rain": ("大雨", "大雨関連情報"),
+        }
+        label_pair = labels.get(topic)
+        if not label_pair:
+            return ""
+
+        context_label, display_label = label_pair
+        line = self._extract_context_line(context_text, context_label)
+        if not line:
+            return ""
+        value = line.split(":", 1)[1].strip()
+        if "active=False" in value:
+            return f"現在、この地域の{display_label}に大きな異常は確認されていません。"
+        if "active=True" in value:
+            if topic == "earthquake":
+                earthquake_answer = self._build_earthquake_answer(context_text)
+                if earthquake_answer:
+                    return earthquake_answer
+            return f"\u73fe\u5728\u3001\u3053\u306e\u5730\u57df\u306e{display_label}\u304c\u3042\u308a\u307e\u3059\u3002{value}"
 
     def _context_line_is_ok(self, line: str) -> bool:
         lowered = line.lower()
@@ -671,13 +871,25 @@ class BasicMemoryAgent(AgentInterface):
             return "通知は確認できません。"
 
         if self._is_local_disaster_question(text_prompt):
-            local_status = self._extract_context_line(context_text, "地域防災")
+            available = self._extract_context_line(context_text, "available")
             status_message = self._extract_context_line(context_text, "状況")
             area = self._extract_context_line(context_text, "対象地域")
             risk_level = self._extract_context_line(context_text, "risk_level")
-            if status_message or local_status:
-                message = (status_message or local_status).split(":", 1)[1].strip()
-                if area:
+            is_unavailable = "false" in available.lower()
+
+            if status_message:
+                message = status_message.split(":", 1)[1].strip()
+                if is_unavailable:
+                    return message
+
+                topic = self._local_disaster_topic(text_prompt)
+                topic_answer = self._build_local_disaster_topic_answer(
+                    topic, context_text
+                )
+                if topic_answer:
+                    return topic_answer
+
+                if area and self._has_municipality_reference(text_prompt):
                     area_name = area.split(":", 1)[1].strip()
                     return f"{area_name}の地域防災情報です。{message}"
                 return message
@@ -1117,10 +1329,24 @@ class BasicMemoryAgent(AgentInterface):
                         input_data, prefetched_context
                     )
                     if direct_answer:
+                        text_prompt = self._to_text_prompt(input_data).lower()
+                        if (
+                            self._is_local_disaster_question(text_prompt)
+                            and self._local_disaster_topic(text_prompt) == "earthquake"
+                        ):
+                            self._schedule_komugi_ui_event("earthquake")
                         logger.info("Answering directly from prefetched Komugi context.")
                         self._add_message(direct_answer, "assistant")
                         yield direct_answer
                         return
+
+            fallback_answer = await self._build_local_status_fallback_answer(input_data)
+            if fallback_answer:
+                logger.info("Answering from Komugi local-status fallback.")
+                self._schedule_komugi_ui_event("earthquake")
+                self._add_message(fallback_answer, "assistant")
+                yield fallback_answer
+                return
 
             if self._use_mcpp and tool_mode and not self._should_enable_mcp_tools(
                 input_data
@@ -1208,3 +1434,8 @@ class BasicMemoryAgent(AgentInterface):
             logger.error(f"Missing formatting key in group conversation prompt: {e}")
         except Exception as e:
             logger.error(f"Failed to load group conversation prompt: {e}")
+
+
+def _join_url(base_url: str, path: str) -> str:
+    base = str(base_url or "http://127.0.0.1:18000").rstrip("/") + "/"
+    return urljoin(base, path.lstrip("/"))

@@ -66,6 +66,9 @@ class AgentFactory:
             tool_manager: Optional[ToolManager] = kwargs.get("tool_manager")
             tool_executor: Optional[ToolExecutor] = kwargs.get("tool_executor")
             mcp_prompt_string: str = kwargs.get("mcp_prompt_string", "")
+            command_center_base_url = _komugi_fast_path_base_url(
+                kwargs.get("system_config")
+            )
 
             # Create the agent with the LLM and live2d_model
             return BasicMemoryAgent(
@@ -83,6 +86,7 @@ class AgentFactory:
                 tool_manager=tool_manager,
                 tool_executor=tool_executor,
                 mcp_prompt_string=mcp_prompt_string,
+                command_center_base_url=command_center_base_url,
             )
 
         elif conversation_agent_choice == "mem0_agent":
@@ -130,3 +134,16 @@ class AgentFactory:
 
         else:
             raise ValueError(f"Unsupported agent type: {conversation_agent_choice}")
+
+
+def _komugi_fast_path_base_url(system_config) -> str:
+    settings = _config_value(system_config, "komugi_fast_path", None)
+    return str(_config_value(settings, "base_url", "http://127.0.0.1:18000"))
+
+
+def _config_value(config, key: str, default=None):
+    if config is None:
+        return default
+    if isinstance(config, dict):
+        return config.get(key, default)
+    return getattr(config, key, default)

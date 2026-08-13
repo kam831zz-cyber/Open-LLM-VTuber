@@ -193,6 +193,25 @@ def _format_local_status(data: dict[str, Any]) -> list[str]:
             f"- 大雨: active={bool(heavy_rain.get('active'))}; level={_as_text(heavy_rain.get('level'))}; count={_as_text(heavy_rain.get('count'), '0')}",
         ]
     )
+    earthquake_items: list[dict[str, Any]] = []
+    top = earthquake.get("top")
+    if isinstance(top, dict) and top:
+        earthquake_items.append(top)
+    raw_items = earthquake.get("items") or []
+    if isinstance(raw_items, list):
+        for item in raw_items:
+            if isinstance(item, dict) and item not in earthquake_items:
+                earthquake_items.append(item)
+            if len(earthquake_items) >= 2:
+                break
+
+    for index, item in enumerate(earthquake_items[:2], start=1):
+        area_text = _as_text(item.get("area"), "")
+        title_text = _as_text(item.get("title"), "")
+        summary_text = _as_text(item.get("summary"), "")
+        lines.append(
+            f"- earthquake_item_{index}: area={area_text}; title={title_text}; summary={summary_text}"
+        )
     return lines
 
 
