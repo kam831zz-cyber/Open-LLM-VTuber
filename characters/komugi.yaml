@@ -49,7 +49,7 @@ character_config:
   agent_config:
     agent_settings:
       basic_memory_agent:
-        mcp_enabled_servers: ["time", "ddg-search", "weather", "komugi-context", "komugi-weather-ai"]
+        mcp_enabled_servers: ["ddg-search", "weather", "komugi-context", "komugi-weather-ai"]
 
   tts_config:
     tts_model: "voicevox_tts"
