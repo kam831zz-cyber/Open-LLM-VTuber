@@ -42,6 +42,13 @@ class KomugiFastPathClient:
         if not self.config.enabled:
             return KomugiFastPathResult(handled=False, request_id=request_id)
 
+        if _is_weather_alert_request(text):
+            return KomugiFastPathResult(
+                handled=False,
+                request_id=request_id,
+                http_roundtrip_ms=_elapsed_ms(start),
+            )
+
         weather_intent = _detect_weather_ai_intent(text)
         if weather_intent:
             weather_result = await self._komugi_weather_ai_response(weather_intent, request_id)
@@ -265,19 +272,29 @@ async def post_komugi_ui_event(
     base_url: str,
     view: str,
     period: str | None = None,
+    topic: str | None = None,
+    local_status: dict[str, Any] | None = None,
 ) -> None:
     payload: dict[str, Any] = {"view": view}
     if period:
         payload["period"] = period
+    if topic:
+        payload["topic"] = topic
+    if local_status is not None:
+        payload["local_status"] = local_status
     try:
-        await asyncio.to_thread(
+        response = await asyncio.to_thread(
             requests.post,
             _join_url(base_url, "/api/komugi/ui/event"),
             json=payload,
             timeout=(0.3, 1.0),
         )
+        response.raise_for_status()
     except Exception as exc:
-        logger.warning(f"Komugi UI event post failed: {type(exc).__name__}")
+        logger.warning(
+            "Komugi UI event post failed: "
+            f"view={view} topic={topic or '-'} error={type(exc).__name__}"
+        )
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -297,6 +314,8 @@ def _detect_weather_ai_intent(text: str) -> str | None:
     normalized = "".join(str(text or "").split())
     if not normalized:
         return None
+    if _is_weather_alert_request(normalized):
+        return None
 
     detail_or_location_markers = tuple(
         _jp(value)
@@ -306,10 +325,6 @@ def _detect_weather_ai_intent(text: str) -> str | None:
             r"\u5225\u5730\u57df",  # ???
             r"\u8a73\u3057\u304f",  # ???
             r"\u8a73\u7d30",  # ??
-            r"\u964d\u6c34\u78ba\u7387",  # ????
-            r"\u6700\u9ad8\u6c17\u6e29",  # ????
-            r"\u6700\u4f4e\u6c17\u6e29",  # ????
-            r"\u6c17\u6e29\u306f",  # ???
         )
     )
     if any(marker in normalized for marker in detail_or_location_markers):
@@ -327,6 +342,20 @@ def _detect_weather_ai_intent(text: str) -> str | None:
 
     if _jp(r"\u5929\u6c17") in normalized and _jp(r"\u660e\u65e5") in normalized:
         return "weather_tomorrow"
+
+    if any(
+        marker in normalized
+        for marker in (
+            _jp(r"\u964d\u6c34\u78ba\u7387"),
+            _jp(r"\u6700\u9ad8\u6c17\u6e29"),
+            _jp(r"\u6700\u4f4e\u6c17\u6e29"),
+        )
+    ):
+        return (
+            "weather_tomorrow"
+            if _jp(r"\u660e\u65e5") in normalized
+            else "weather_today"
+        )
 
     if _jp(r"\u5098") in normalized and any(
         marker in normalized
@@ -389,6 +418,45 @@ def _detect_weather_ai_intent(text: str) -> str | None:
         return "weather_today"
 
     return None
+
+
+def _is_weather_alert_request(text: str) -> bool:
+    normalized = "".join(str(text or "").lower().split())
+    if not normalized:
+        return False
+
+    educational_markers = tuple(
+        _jp(value)
+        for value in (
+            r"\u4ed5\u7d44\u307f",
+            r"\u3069\u3046\u3057\u3066",
+            r"\u306a\u305c",
+            r"\u7406\u7531",
+            r"\u3068\u306f",
+            r"\u6559\u3048\u3066",
+        )
+    )
+    if any(marker in normalized for marker in educational_markers):
+        return False
+
+    alert_markers = (_jp(r"\u8b66\u5831"), _jp(r"\u6ce8\u610f\u5831"))
+    if any(marker in normalized for marker in alert_markers):
+        return True
+
+    weather_information = _jp(r"\u6c17\u8c61\u60c5\u5831")
+    status_markers = tuple(
+        _jp(value)
+        for value in (
+            r"\u3042\u308b",
+            r"\u51fa\u3066",
+            r"\u767a\u8868",
+            r"\u72b6\u6cc1",
+            r"\u78ba\u8a8d",
+        )
+    )
+    return weather_information in normalized and any(
+        marker in normalized for marker in status_markers
+    )
 
 def _should_skip_weather_fast_path(text: str) -> bool:
     normalized = "".join(str(text or "").split())

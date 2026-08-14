@@ -332,7 +332,7 @@ class BasicMemoryAgent(AgentInterface):
 
     def _is_local_disaster_question(self, text_prompt: str) -> bool:
         """Return True for registered-area disaster and safety-status questions."""
-        educational_keywords = ["仕組み", "どうして", "なぜ", "理由"]
+        educational_keywords = ["仕組み", "どうして", "なぜ", "理由", "とは", "教えて"]
         if any(keyword in text_prompt for keyword in educational_keywords):
             return False
 
@@ -346,6 +346,12 @@ class BasicMemoryAgent(AgentInterface):
             "ジャパンモニター",
         ]
         if any(keyword in text_prompt for keyword in explicit_disaster_keywords):
+            return True
+
+        if "気象情報" in text_prompt and any(
+            keyword in text_prompt
+            for keyword in ["ある", "出てる", "出ている", "発表", "状況", "確認"]
+        ):
             return True
 
         disaster_topics = [
@@ -510,6 +516,8 @@ class BasicMemoryAgent(AgentInterface):
         text_prompt = self._to_text_prompt(input_data).lower()
         if not text_prompt:
             return None
+        if self._is_local_disaster_question(text_prompt):
+            return None
 
         weather_keywords = [
             "weather",
@@ -639,16 +647,29 @@ class BasicMemoryAgent(AgentInterface):
             }
 
     def _schedule_komugi_ui_event(
-        self, view: str, period: str | None = None
+        self,
+        view: str,
+        period: str | None = None,
+        topic: str | None = None,
+        local_status: Dict[str, Any] | None = None,
     ) -> None:
         asyncio.create_task(
-            post_komugi_ui_event(self._command_center_base_url, view, period)
+            post_komugi_ui_event(
+                self._command_center_base_url,
+                view,
+                period,
+                topic,
+                local_status,
+            )
         )
 
-    async def _build_local_status_fallback_answer(self, input_data: BatchInput) -> str:
+    async def _build_local_status_fallback_answer(
+        self, input_data: BatchInput
+    ) -> tuple[str, Dict[str, Any] | None]:
         text_prompt = self._to_text_prompt(input_data).lower()
-        if "\u5730\u9707" not in text_prompt:
-            return ""
+        topic = self._local_disaster_topic(text_prompt)
+        if topic not in {"earthquake", "weather_alerts"}:
+            return "", None
 
         try:
             response = await asyncio.to_thread(
@@ -660,27 +681,76 @@ class BasicMemoryAgent(AgentInterface):
             data = response.json()
         except Exception as exc:
             logger.warning(f"Komugi local-status fallback failed: {type(exc).__name__}")
-            return ""
+            message = "現在、地域防災情報の取得先に接続できていません。"
+            return message, {"available": False, "message": message}
 
         if not isinstance(data, dict):
-            return ""
+            message = "現在、地域防災情報の取得先に接続できていません。"
+            return message, {"available": False, "message": message}
         if data.get("available") is False:
-            return str(data.get("message") or "").strip()
+            message = str(
+                data.get("message")
+                or "現在、地域防災情報の取得先に接続できていません。"
+            ).strip()
+            return message, data
+
+        if topic == "weather_alerts":
+            alerts = data.get("weather_alerts")
+            alerts = alerts if isinstance(alerts, list) else []
+            area = data.get("area") if isinstance(data.get("area"), dict) else {}
+            area_name = str(
+                area.get("city")
+                or area.get("location_name")
+                or " ".join(
+                    str(area.get(key) or "") for key in ("prefecture", "city")
+                ).strip()
+                or "この地域"
+            )
+            metadata = data.get("metadata")
+            stale = bool(
+                isinstance(metadata, dict) and metadata.get("stale")
+            )
+            prefix = "直前に取得した情報では、" if stale else "現在、"
+            alert_names = [
+                str(item.get("title") or item.get("name") or "").strip()
+                for item in alerts
+                if isinstance(item, dict)
+            ]
+            alert_names = [name for name in alert_names if name]
+            if alert_names:
+                return (
+                    f"{prefix}{area_name}には{'、'.join(alert_names)}が出ています。",
+                    data,
+                )
+            return (
+                f"{prefix}{area_name}に発表中の気象警報・注意報は確認されていません。",
+                data,
+            )
 
         earthquake = data.get("earthquake") if isinstance(data.get("earthquake"), dict) else {}
         area = data.get("area") if isinstance(data.get("area"), dict) else {}
         area_name = str(
-            area.get("location_name")
+            area.get("city")
+            or area.get("location_name")
             or " ".join(str(area.get(key) or "") for key in ("prefecture", "city")).strip()
             or "\u3053\u306e\u5730\u57df"
         )
         if earthquake.get("active") is True:
             top = earthquake.get("top") if isinstance(earthquake.get("top"), dict) else {}
+            earthquake_area = str(top.get("area") or "").strip()
             summary = str(top.get("summary") or top.get("title") or "").strip()
-            if summary:
-                return f"{area_name}\u306e\u5730\u9707\u60c5\u5831\u3067\u3059\u3002{summary}"
-            return f"{area_name}\u3067\u5730\u9707\u60c5\u5831\u304c\u3042\u308a\u307e\u3059\u3002"
-        return f"\u73fe\u5728\u3001{area_name}\u306e\u5730\u9707\u60c5\u5831\u306b\u5927\u304d\u306a\u7570\u5e38\u306f\u78ba\u8a8d\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002"
+            title = str(top.get("title") or "").strip()
+            intensity = self._extract_intensity_text(title, summary)
+            if earthquake_area and intensity:
+                answer = f"{earthquake_area}で{intensity}の地震がありました。"
+            elif earthquake_area:
+                answer = f"{earthquake_area}で地震情報があります。"
+            elif summary:
+                answer = summary
+            else:
+                answer = "地震情報があります。"
+            return f"{answer}{area_name}への影響は現在確認できていません。", data
+        return f"現在、{area_name}の地震情報に大きな異常は確認されていません。", data
 
     def _extract_context_value(self, context_text: str, label: str) -> str:
         match = re.search(rf"{re.escape(label)}:\s*([^/\n;]+)", context_text)
@@ -706,7 +776,11 @@ class BasicMemoryAgent(AgentInterface):
         return any(keyword in text_prompt for keyword in ["市", "町", "村", "区"])
 
     def _local_disaster_topic(self, text_prompt: str) -> str:
-        if "警報" in text_prompt or "注意報" in text_prompt:
+        if (
+            "警報" in text_prompt
+            or "注意報" in text_prompt
+            or "気象情報" in text_prompt
+        ):
             return "weather_alerts"
         if "地震" in text_prompt:
             return "earthquake"
@@ -876,13 +950,14 @@ class BasicMemoryAgent(AgentInterface):
             area = self._extract_context_line(context_text, "対象地域")
             risk_level = self._extract_context_line(context_text, "risk_level")
             is_unavailable = "false" in available.lower()
+            topic = self._local_disaster_topic(text_prompt)
 
+            if is_unavailable:
+                return ""
+            if topic == "weather_alerts":
+                return ""
             if status_message:
                 message = status_message.split(":", 1)[1].strip()
-                if is_unavailable:
-                    return message
-
-                topic = self._local_disaster_topic(text_prompt)
                 topic_answer = self._build_local_disaster_topic_answer(
                     topic, context_text
                 )
@@ -1330,20 +1405,38 @@ class BasicMemoryAgent(AgentInterface):
                     )
                     if direct_answer:
                         text_prompt = self._to_text_prompt(input_data).lower()
-                        if (
-                            self._is_local_disaster_question(text_prompt)
-                            and self._local_disaster_topic(text_prompt) == "earthquake"
-                        ):
-                            self._schedule_komugi_ui_event("earthquake")
+                        if self._is_local_disaster_question(text_prompt):
+                            topic = self._local_disaster_topic(text_prompt)
+                            if topic == "earthquake":
+                                self._schedule_komugi_ui_event("earthquake")
+                            else:
+                                self._schedule_komugi_ui_event(
+                                    "disaster",
+                                    topic=topic,
+                                )
                         logger.info("Answering directly from prefetched Komugi context.")
                         self._add_message(direct_answer, "assistant")
                         yield direct_answer
                         return
 
-            fallback_answer = await self._build_local_status_fallback_answer(input_data)
+            fallback_answer, fallback_status = (
+                await self._build_local_status_fallback_answer(input_data)
+            )
             if fallback_answer:
                 logger.info("Answering from Komugi local-status fallback.")
-                self._schedule_komugi_ui_event("earthquake")
+                text_prompt = self._to_text_prompt(input_data).lower()
+                topic = self._local_disaster_topic(text_prompt)
+                if topic == "earthquake":
+                    self._schedule_komugi_ui_event(
+                        "earthquake",
+                        local_status=fallback_status,
+                    )
+                else:
+                    self._schedule_komugi_ui_event(
+                        "disaster",
+                        topic=topic,
+                        local_status=fallback_status,
+                    )
                 self._add_message(fallback_answer, "assistant")
                 yield fallback_answer
                 return
