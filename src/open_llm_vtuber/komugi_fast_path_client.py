@@ -68,6 +68,19 @@ class KomugiFastPathClient:
                 return weather_result
 
         weather_fallback_result = weather_result if weather_intent in {"weather_today", "weather_tomorrow", "weather_weekly"} and 'weather_result' in locals() else None
+        if _is_home_operation_request(text):
+            return KomugiFastPathResult(
+                handled=True,
+                response=_jp(r"\u4eca\u306f\u5bb6\u96fb\u306e\u72b6\u614b\u78ba\u8a8d\u3060\u3051\u5bfe\u5fdc\u3057\u3066\u3044\u307e\u3059\u3002"),
+                intent="home_read_only_operation",
+                request_id=request_id,
+                http_roundtrip_ms=_elapsed_ms(start),
+            )
+
+        home_topic, home_scope = _detect_home_intent(text)
+        if home_topic:
+            return await self._komugi_home_response(home_topic, request_id, home_scope)
+
         if _should_skip_weather_fast_path(text):
             return KomugiFastPathResult(
                 handled=False,
@@ -118,6 +131,47 @@ class KomugiFastPathClient:
             )
             return weather_fallback_result
         return result
+
+    async def _komugi_home_response(
+        self,
+        topic: str,
+        request_id: str,
+        scope: str | None = None,
+    ) -> KomugiFastPathResult:
+        start = time.perf_counter()
+        try:
+            response = await asyncio.to_thread(
+                requests.get,
+                self._url("/api/komugi/home"),
+                timeout=(0.5, min(8.0, max(3.0, self.config.timeout_seconds))),
+            )
+            response.raise_for_status()
+            snapshot = response.json()
+        except Exception as exc:
+            logger.warning(f"Komugi Home unavailable: {type(exc).__name__}")
+            snapshot = {"available": False, "groups": {}, "error": "home_assistant_unavailable"}
+
+        if not isinstance(snapshot, dict):
+            snapshot = {"available": False, "groups": {}, "error": "invalid_home_snapshot"}
+
+        answer = _build_home_answer(topic, snapshot, scope)
+        if self.config.ui_event_enabled:
+            await post_komugi_ui_event(
+                self.config.base_url,
+                "home",
+                topic=topic,
+                home_snapshot=snapshot,
+                scope=scope,
+            )
+        return KomugiFastPathResult(
+            handled=True,
+            response=answer,
+            intent=f"home_{topic}",
+            request_id=request_id,
+            timing={"home_snapshot": snapshot.get("snapshot_id"), "home_scope": scope},
+            error=None if snapshot.get("available") is True else "home_assistant_unavailable",
+            http_roundtrip_ms=_elapsed_ms(start),
+        )
 
     async def _komugi_weather_ai_response(
         self,
@@ -274,6 +328,8 @@ async def post_komugi_ui_event(
     period: str | None = None,
     topic: str | None = None,
     local_status: dict[str, Any] | None = None,
+    home_snapshot: dict[str, Any] | None = None,
+    scope: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {"view": view}
     if period:
@@ -282,6 +338,10 @@ async def post_komugi_ui_event(
         payload["topic"] = topic
     if local_status is not None:
         payload["local_status"] = local_status
+    if home_snapshot is not None:
+        payload["home_snapshot"] = home_snapshot
+    if scope:
+        payload["scope"] = scope
     try:
         response = await asyncio.to_thread(
             requests.post,
@@ -357,6 +417,25 @@ def _detect_weather_ai_intent(text: str) -> str | None:
             else "weather_today"
         )
 
+    day_marker = next(
+        (marker for marker in (_jp(r"\u4eca\u65e5"), _jp(r"\u660e\u65e5")) if marker in normalized),
+        None,
+    )
+    if day_marker and any(
+        marker in normalized
+        for marker in (
+            _jp(r"\u6691\u3044"), _jp(r"\u5bd2\u3044"), _jp(r"\u6691\u3055"),
+            _jp(r"\u5bd2\u3055"), _jp(r"\u6e7f\u5ea6"),
+            _jp(r"\u6c17\u6e29"),
+        )
+    ):
+        if day_marker == _jp(r"\u660e\u65e5"):
+            return "weather_tomorrow"
+        return "weather_heat" if any(
+            marker in normalized
+            for marker in (_jp(r"\u6691\u3044"), _jp(r"\u5bd2\u3044"), _jp(r"\u6691\u3055"), _jp(r"\u5bd2\u3055"))
+        ) else "weather_today"
+
     if _jp(r"\u5098") in normalized and any(
         marker in normalized
         for marker in (
@@ -418,6 +497,141 @@ def _detect_weather_ai_intent(text: str) -> str | None:
         return "weather_today"
 
     return None
+
+
+def _detect_home_intent(text: str) -> tuple[str | None, str | None]:
+    normalized = "".join(str(text or "").lower().split())
+    if not normalized or _is_home_operation_request(normalized):
+        return None, None
+
+    scoped_rules = (
+        ("humidity", "outdoor", (r"\u5c4b\u5916\u306e\u6e7f\u5ea6", r"\u5916\u306e\u6e7f\u5ea6", r"\u5916\u6c17\u306e\u6e7f\u5ea6")),
+        ("temperature", "outdoor", (r"\u5c4b\u5916\u6e29\u5ea6", r"\u5916\u306e\u6e29\u5ea6", r"\u5916\u4f55\u5ea6", r"\u5916\u6c17\u6e29", r"\u5916\u306f\u4f55\u5ea6")),
+        ("humidity", "indoor", (r"\u90e8\u5c4b\u306e\u6e7f\u5ea6", r"\u5ba4\u5185\u306e\u6e7f\u5ea6", r"\u30ea\u30d3\u30f3\u30b0\u306e\u6e7f\u5ea6")),
+        ("temperature", "indoor", (r"\u5ba4\u6e29", r"\u90e8\u5c4b\u4f55\u5ea6", r"\u90e8\u5c4b\u306e\u6e29\u5ea6", r"\u30ea\u30d3\u30f3\u30b0\u4f55\u5ea6", r"\u90e8\u5c4b\u6691\u3044", r"\u90e8\u5c4b\u5bd2\u3044")),
+    )
+    for topic, scope, escaped_markers in scoped_rules:
+        if any(_jp(marker) in normalized for marker in escaped_markers):
+            return topic, scope
+
+    rules = (
+        ("lights", (r"\u96fb\u6c17\u3064\u3044\u3066\u308b", r"\u7167\u660e\u3064\u3044\u3066\u308b", r"\u30ea\u30d3\u30f3\u30b0\u306e\u96fb\u6c17\u3064\u3044\u3066\u308b", r"\u5bdd\u5ba4\u306e\u30e9\u30a4\u30c8\u3064\u3044\u3066\u308b")),
+        ("climate", (r"\u30a8\u30a2\u30b3\u30f3\u3064\u3044\u3066\u308b", r"\u5bdd\u5ba4\u306e\u30a8\u30a2\u30b3\u30f3\u3069\u3046", r"\u30ea\u30d3\u30f3\u30b0\u306e\u30a8\u30a2\u30b3\u30f3\u3069\u3046")),
+        ("media", (r"\u30c6\u30ec\u30d3\u3064\u3044\u3066\u308b", r"\u30c6\u30ec\u30d3\u3069\u3046")),
+        ("overview", (r"\u5bb6\u306e\u72b6\u614b", r"\u5bb6\u306e\u69d8\u5b50", r"\u5bb6\u3069\u3046\u306a\u3063\u3066\u308b", r"homeassistant\u3069\u3046", r"\u30db\u30fc\u30e0\u30a2\u30b7\u30b9\u30bf\u30f3\u30c8\u3069\u3046")),
+    )
+    for topic, escaped_markers in rules:
+        if any(_jp(marker) in normalized for marker in escaped_markers):
+            return topic, None
+    return None, None
+
+
+def _detect_home_topic(text: str) -> str | None:
+    return _detect_home_intent(text)[0]
+
+
+def _is_home_operation_request(text: str) -> bool:
+    normalized = "".join(str(text or "").lower().split())
+    operation_phrases = (
+        r"\u96fb\u6c17\u3064\u3051\u3066", r"\u96fb\u6c17\u6d88\u3057\u3066", r"\u30e9\u30a4\u30c8\u6d88\u3057\u3066",
+        r"\u30a8\u30a2\u30b3\u30f3\u3064\u3051\u3066", r"\u30a8\u30a2\u30b3\u30f3\u6d88\u3057\u3066", r"26\u5ea6\u306b\u3057\u3066",
+        r"\u30c6\u30ec\u30d3\u3064\u3051\u3066", r"\u30c6\u30ec\u30d3\u6d88\u3057\u3066",
+    )
+    return any(_jp(phrase) in normalized for phrase in operation_phrases)
+
+
+def _build_home_answer(topic: str, snapshot: dict[str, Any], scope: str | None = None) -> str:
+    if snapshot.get("available") is not True:
+        return _jp(r"Home Assistant\u306b\u63a5\u7d9a\u3067\u304d\u307e\u305b\u3093\u3002")
+    groups = snapshot.get("groups") if isinstance(snapshot.get("groups"), dict) else {}
+    temperature_id = "sensor.shi_wai_wen_du_temperature" if scope == "outdoor" else "sensor.env_sensor_room_temperature"
+    humidity_id = "sensor.shi_wai_wen_du_humidity" if scope == "outdoor" else "sensor.env_sensor_room_humidity"
+    temperature = _entity_by_id(groups.get("temperature"), temperature_id)
+    humidity = _entity_by_id(groups.get("humidity"), humidity_id)
+    if topic == "temperature":
+        label = _jp(r"\u5916\u6c17\u6e29") if scope == "outdoor" else _jp(r"\u5ba4\u6e29")
+        return _measurement_answer(temperature, label, f"{label}は取得できません。")
+    if topic == "humidity":
+        label = _jp(r"\u5c4b\u5916\u306e\u6e7f\u5ea6") if scope == "outdoor" else _jp(r"\u5ba4\u5185\u306e\u6e7f\u5ea6")
+        return _measurement_answer(humidity, label, f"{label}は取得できません。")
+    if topic == "lights":
+        light = _first_entity(groups.get("lighting"))
+        if not light or light.get("available") is not True:
+            return _jp(r"\u5bdd\u5ba4\u306e\u30e9\u30a4\u30c8\u306e\u72b6\u614b\u306f\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3002")
+        return f"{light.get('name') or light.get('entity_id')}は{_home_state_label(light.get('state'))}です。"
+    if topic == "climate":
+        items = [item for item in _entities(groups.get("climate")) if item.get("available") is True]
+        if not items:
+            return _jp(r"\u30a8\u30a2\u30b3\u30f3\u306e\u72b6\u614b\u306f\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3002")
+        return "、".join(_climate_answer_part(item) for item in items) + "です。"
+    if topic == "media":
+        media = _first_available(groups.get("media_player"))
+        if not media:
+            return _jp(r"Home Assistant\u304b\u3089\u30c6\u30ec\u30d3\u306e\u72b6\u614b\u306f\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3002")
+        return f"{media.get('name') or media.get('entity_id')}は{_home_state_label(media.get('state'))}です。"
+    parts = [_jp(r"Home Assistant\u306f\u6b63\u5e38\u3067\u3059\u3002")]
+    if temperature:
+        parts.append(_measurement_answer(temperature, _jp(r"\u5ba4\u6e29"), ""))
+    if humidity:
+        parts.append(_measurement_answer(humidity, _jp(r"\u6e7f\u5ea6"), ""))
+    return "".join(parts)
+
+
+def _entities(value: Any) -> list[dict[str, Any]]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _first_entity(value: Any) -> dict[str, Any] | None:
+    items = _entities(value)
+    return items[0] if items else None
+
+
+def _first_available(value: Any) -> dict[str, Any] | None:
+    return next((item for item in _entities(value) if item.get("available") is True), None)
+
+
+def _entity_by_id(value: Any, entity_id: str) -> dict[str, Any] | None:
+    return next((item for item in _entities(value) if item.get("entity_id") == entity_id and item.get("available") is True), None)
+
+
+def _measurement_answer(entity: dict[str, Any] | None, label: str, fallback: str) -> str:
+    if not entity:
+        return fallback
+    try:
+        value = f"{float(entity.get('state')):.1f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        value = str(entity.get("state") or "")
+    unit = str(entity.get("unit") or "").replace("°C", _jp(r"\u5ea6"))
+    return f"{label}は{value}{unit}です。"
+
+
+def _home_state_label(value: Any) -> str:
+    state = str(value or "unknown").lower()
+    return {
+        "on": _jp(r"\u30aa\u30f3"),
+        "off": _jp(r"\u30aa\u30d5"),
+        "fan_only": _jp(r"\u9001\u98a8"),
+        "heat": _jp(r"\u6696\u623f"),
+        "cool": _jp(r"\u51b7\u623f"),
+        "dry": _jp(r"\u9664\u6e7f"),
+    }.get(state, str(value or _jp(r"\u4e0d\u660e")))
+
+
+def _climate_answer_part(entity: dict[str, Any]) -> str:
+    names = {
+        "climate.qin_shi_eakon": _jp(r"\u5bdd\u5ba4\u306e\u30a8\u30a2\u30b3\u30f3"),
+        "climate.rihinkueakon": _jp(r"\u30ea\u30d3\u30f3\u30b0\u306e\u30a8\u30a2\u30b3\u30f3"),
+    }
+    name = names.get(str(entity.get("entity_id"))) or entity.get("name") or entity.get("entity_id")
+    state = str(entity.get("display_state") or _home_state_label(entity.get("state")))
+    target = entity.get("target_temperature")
+    if entity.get("effective_mode") != "off" and target is not None:
+        try:
+            target_text = f"{float(target):g}"
+        except (TypeError, ValueError):
+            target_text = str(target)
+        return f"{name}は{target_text}度で{state}"
+    return f"{name}は{state}"
 
 
 def _is_weather_alert_request(text: str) -> bool:
