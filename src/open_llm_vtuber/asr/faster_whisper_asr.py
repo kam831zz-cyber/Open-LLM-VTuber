@@ -1,5 +1,9 @@
+import os
+import time
+
 import numpy as np
 from faster_whisper import WhisperModel
+from loguru import logger
 from .asr_interface import ASRInterface
 
 
@@ -27,6 +31,20 @@ class VoiceRecognition(ASRInterface):
         )
 
     def transcribe_np(self, audio: np.ndarray) -> str:
+        diagnostic = os.getenv("KOMUGI_ASR_DIAGNOSTICS", "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        started_at = time.perf_counter()
+        if diagnostic:
+            logger.info(
+                "ASR diagnostic start: samples={} duration_s={:.3f} sample_rate={}",
+                len(audio),
+                len(audio) / self.SAMPLE_RATE,
+                self.SAMPLE_RATE,
+            )
         if self.prompt:
             segments, info = self.model.transcribe(
                 audio,
@@ -42,7 +60,21 @@ class VoiceRecognition(ASRInterface):
                 language=self.LANG if self.LANG else None,
                 condition_on_previous_text=False,
             )
-        text = [segment.text for segment in segments]
+        text = []
+        for segment in segments:
+            if diagnostic and not text:
+                logger.info(
+                    "ASR diagnostic first segment: elapsed_ms={}",
+                    round((time.perf_counter() - started_at) * 1000),
+                )
+            text.append(segment.text)
+
+        if diagnostic:
+            logger.info(
+                "ASR diagnostic complete: wall_ms={} segments={}",
+                round((time.perf_counter() - started_at) * 1000),
+                len(text),
+            )
 
         if not text:
             return ""

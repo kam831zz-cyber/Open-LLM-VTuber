@@ -1,6 +1,7 @@
 from typing import Union, List, Dict, Any, Optional
 import asyncio
 import json
+import os
 import time
 import uuid
 from loguru import logger
@@ -44,6 +45,8 @@ async def process_single_conversation(
     ollama_total_ms = None
     record_error = None
     fast_path_http_ms = None
+    fast_path_intent = None
+    is_audio_input = isinstance(user_input, np.ndarray)
 
     try:
         await send_conversation_start_signals(websocket_send)
@@ -82,6 +85,7 @@ async def process_single_conversation(
             fast_path_result = await fast_path_client.quick_response(input_text)
             request_id = fast_path_result.request_id
             fast_path_http_ms = fast_path_result.http_roundtrip_ms
+            fast_path_intent = fast_path_result.intent
             if fast_path_result.handled and fast_path_result.response:
                 route = "fast_path"
                 logger.info(
@@ -109,6 +113,15 @@ async def process_single_conversation(
                 logger.warning(
                     f"Komugi Fast Path fallback request_id={request_id} error={fast_path_result.error}"
                 )
+
+        if is_audio_input and os.getenv(
+            "KOMUGI_ASR_DIAGNOSTICS", ""
+        ).lower() in {"1", "true", "yes", "on"}:
+            logger.info(
+                "ASR diagnostic route: route={} intent={}",
+                route,
+                fast_path_intent,
+            )
 
         try:
             agent_output_stream = (
