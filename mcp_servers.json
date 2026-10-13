@@ -7,27 +7,18 @@
       ]
     },
     "weather": {
-      "command": "uv",
-      "args": [
-        "run",
-        "python",
-        "scripts/weather_mcp_server.py"
+      "command": "C:\\home-ai\\Open-LLM-VTuber\\.venv\\Scripts\\python.exe",
+      "args": ["scripts/weather_mcp_server.py"
       ]
     },
     "komugi-context": {
-      "command": "uv",
-      "args": [
-        "run",
-        "python",
-        "scripts/komugi_context_mcp_server.py"
+      "command": "C:\\home-ai\\Open-LLM-VTuber\\.venv\\Scripts\\python.exe",
+      "args": ["scripts/komugi_context_mcp_server.py"
       ]
     },
     "komugi-weather-ai": {
-      "command": "uv",
-      "args": [
-        "run",
-        "python",
-        "scripts/komugi_weather_ai_mcp_server.py"
+      "command": "C:\\home-ai\\Open-LLM-VTuber\\.venv\\Scripts\\python.exe",
+      "args": ["scripts/komugi_weather_ai_mcp_server.py"
       ]
     }
   }
