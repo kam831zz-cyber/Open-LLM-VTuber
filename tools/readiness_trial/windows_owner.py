@@ -43,6 +43,43 @@ k.CreateToolhelp32Snapshot.argtypes=[w.DWORD,w.DWORD]
 k.CreateToolhelp32Snapshot.restype=w.HANDLE
 k.Process32FirstW.argtypes=[w.HANDLE,c.POINTER(ProcessEntry)]
 k.Process32NextW.argtypes=[w.HANDLE,c.POINTER(ProcessEntry)]
+class ThreadEntry(c.Structure):
+    _fields_=[('size',w.DWORD),('usage',w.DWORD),('tid',w.DWORD),('pid',w.DWORD),
+              ('priority',w.LONG),('delta',w.LONG),('flags',w.DWORD)]
+k.Thread32First.argtypes=[w.HANDLE,c.POINTER(ThreadEntry)]
+k.Thread32Next.argtypes=[w.HANDLE,c.POINTER(ThreadEntry)]
+k.OpenThread.argtypes=[w.DWORD,w.BOOL,w.DWORD]
+k.OpenThread.restype=w.HANDLE
+k.ResumeThread.argtypes=[w.HANDLE]
+k.ResumeThread.restype=w.DWORD
+k.GetSystemDirectoryW.argtypes=[w.LPWSTR,w.UINT]
+k.GetSystemDirectoryW.restype=w.UINT
+
+
+def console_host_path():
+    buffer=c.create_unicode_buffer(32768)
+    length=k.GetSystemDirectoryW(buffer,len(buffer))
+    if not length or length>=len(buffer):raise OSError('system_directory_query_failed')
+    return buffer.value+'\\conhost.exe'
+
+
+def resume(pid):
+    snapshot=k.CreateToolhelp32Snapshot(4,0)
+    if snapshot==c.c_void_p(-1).value:raise OSError('thread_snapshot_failed')
+    try:
+        entry=ThreadEntry();entry.size=c.sizeof(entry)
+        found=k.Thread32First(snapshot,c.byref(entry))
+        while found:
+            if entry.pid==pid:
+                handle=k.OpenThread(2,False,entry.tid)
+                if not handle:raise OSError('thread_open_failed')
+                try:
+                    if k.ResumeThread(handle)==0xffffffff:raise OSError('thread_resume_failed')
+                    return
+                finally:k.CloseHandle(handle)
+            found=k.Thread32Next(snapshot,c.byref(entry))
+        raise OSError('candidate_thread_not_found')
+    finally:k.CloseHandle(snapshot)
 
 
 def parents():
@@ -101,22 +138,30 @@ def cpu_ticks():
 
 def identity(pid):
     handle=k.OpenProcess(0x1000|0x10,False,pid)
-    if not handle:return {'pid':pid,'exited_or_inaccessible':True}
+    if not handle:
+        error=c.get_last_error()
+        if error==87:return {'pid':pid,'state':'missing','exited_or_inaccessible':True}
+        raise OSError(error,'identity_open_failed')
     try:
         m=ProcessMemory();m.cb=c.sizeof(m)
-        psapi.GetProcessMemoryInfo(handle,c.byref(m),c.sizeof(m))
+        measured=bool(psapi.GetProcessMemoryInfo(handle,c.byref(m),c.sizeof(m)))
         created,exited,kernel,user=(c.c_ulonglong() for _ in range(4))
         if not k.GetProcessTimes(handle,c.byref(created),c.byref(exited),c.byref(kernel),c.byref(user)):
             raise OSError('identity_time_failed')
         if exited.value:
-            return {'pid':pid,'created_filetime':created.value,'exited_or_inaccessible':True}
+            code=w.DWORD()
+            valid=k.GetExitCodeProcess(handle,c.byref(code))
+            return {'pid':pid,'created_filetime':created.value,'state':'exited',
+                    'exit_code':code.value if valid else None,'exited_or_inaccessible':True}
         name=c.create_unicode_buffer(32768);size=w.DWORD(len(name))
         if not k.QueryFullProcessImageNameW(handle,0,name,c.byref(size)):
             code=w.DWORD()
             if k.GetExitCodeProcess(handle,c.byref(code)) and code.value!=259:
-                return {'pid':pid,'created_filetime':created.value,'exited_or_inaccessible':True}
+                return {'pid':pid,'created_filetime':created.value,'state':'exited',
+                        'exit_code':code.value,'exited_or_inaccessible':True}
             raise OSError('identity_path_failed')
-        return {'pid':pid,'created_filetime':created.value,'executable':name.value,
-                'working_set_bytes':m.ws,'private_bytes':m.private,
+        return {'pid':pid,'created_filetime':created.value,'state':'running','executable':name.value,
+                'working_set_bytes':m.ws if measured else None,'private_bytes':m.private if measured else None,
+                'memory_query_succeeded':measured,
                 'cpu_ticks':kernel.value+user.value}
     finally:k.CloseHandle(handle)

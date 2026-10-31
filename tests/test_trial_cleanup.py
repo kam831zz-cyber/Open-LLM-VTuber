@@ -49,6 +49,17 @@ class TrialCleanupTests(unittest.TestCase):
         with self.assertRaises(OSError):identity(42)
         kernel.CloseHandle.assert_called_once()
 
+    def test_access_denied_is_not_reported_as_a_missing_process(self):
+        identity,kernel=self.identity_function()
+        kernel.OpenProcess.return_value=0
+        with patch('ctypes.get_last_error',return_value=5),self.assertRaises(OSError):identity(42)
+
+    def test_missing_process_has_explicit_missing_state(self):
+        identity,kernel=self.identity_function()
+        kernel.OpenProcess.return_value=0
+        with patch('ctypes.get_last_error',return_value=87):result=identity(42)
+        self.assertEqual(result['state'],'missing')
+
     def guard(self,**kwargs):
         module=runpy.run_path(str(ROOT/'tools/readiness_trial/guard.py'),run_name='trial_guard_test')
         with patch('sys.addaudithook') as register:

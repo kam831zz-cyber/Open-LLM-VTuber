@@ -1,5 +1,9 @@
 # Phase 1F-2: single-start attempt, readiness NOT established
 
+Follow-up: [Phase 1F-2A](PHASE_1F_2A.md) reproduced a console-host false-positive
+with a model-free dummy and validated durable result recording. The original
+attempt's missing stop reason remains UNKNOWN; this historical result is unchanged.
+
 Base: c3578025fc136901bbf939b35d20110afa823a0c.
 Branch: test/g10-openllm-readiness-single. No production rollout.
 

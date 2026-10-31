@@ -1,0 +1,149 @@
+{
+  "phase": "1F-2A",
+  "real_openllm_starts": 0,
+  "os_trials_sequential": true,
+  "trials": [
+    {
+      "diagnostic_directory_name": "openllm-meter-reliability-20261101",
+      "mode": "dummy",
+      "start_count": 1,
+      "candidate_pid": 12168,
+      "candidate_created_filetime": 134379617502366959,
+      "stop_reason": "unexpected_owned_executable",
+      "stop_causes": [
+        "unexpected_owned_executable",
+        "unexpected_child_count"
+      ],
+      "stop_elapsed_s": 0.625,
+      "total_seconds": 0.859,
+      "sample_count": 1,
+      "system_cpu_percent_samples": [],
+      "first_interval_cpu_unavailable": true,
+      "minimum_available_bytes": 2528432128,
+      "peak_worker_working_set_bytes": 3301376,
+      "peak_worker_private_bytes": 466944,
+      "job_members_at_assignment": [
+        12168
+      ],
+      "owned_before_cleanup": [
+        {
+          "pid": 12168,
+          "created_filetime": 134379617502366959,
+          "executable_basename": "python.exe"
+        },
+        {
+          "pid": 2444,
+          "created_filetime": 134379617503025769,
+          "executable_basename": "conhost.exe"
+        }
+      ],
+      "job_close": {
+        "closed": true
+      },
+      "cleanup_exit_code": 0,
+      "remaining_owned": [],
+      "owned_exit_states": [
+        {
+          "pid": 12168,
+          "state": "exited"
+        },
+        {
+          "pid": 2444,
+          "state": "gone"
+        }
+      ],
+      "protected_ports_unchanged": true,
+      "production_hashes_unchanged": true,
+      "measurement_errors": [],
+      "persistence_errors": [],
+      "files": {
+        "checkpoint.json": {
+          "bytes": 5012,
+          "sha256": "2ab10533da1b67891be670b71cb298583f631cd92d98b08e02a39be19fe665bd"
+        },
+        "pre-cleanup.json": {
+          "bytes": 3036,
+          "sha256": "1809dd771888bff5b623981d9a438a2f042068a0ac8a49400c4778a47845824e"
+        },
+        "result.json": {
+          "bytes": 5061,
+          "sha256": "1d52ca6fc98c95abd1fa9015c8304923dc2984208db51b70c10359dc101c4f4b"
+        }
+      }
+    },
+    {
+      "diagnostic_directory_name": "openllm-meter-reliability-20261101-confirmed",
+      "mode": "dummy",
+      "start_count": 1,
+      "candidate_pid": 1556,
+      "candidate_created_filetime": 134379618388722142,
+      "stop_reason": "dummy_observation_complete",
+      "stop_causes": [
+        "dummy_observation_complete"
+      ],
+      "stop_elapsed_s": 1.687,
+      "total_seconds": 1.922,
+      "sample_count": 5,
+      "system_cpu_percent_samples": [
+        21.53,
+        3.68,
+        6.62,
+        2.94
+      ],
+      "first_interval_cpu_unavailable": true,
+      "minimum_available_bytes": 2562195456,
+      "peak_worker_working_set_bytes": 16674816,
+      "peak_worker_private_bytes": 10489856,
+      "job_members_at_assignment": [
+        1556
+      ],
+      "owned_before_cleanup": [
+        {
+          "pid": 1556,
+          "created_filetime": 134379618388722142,
+          "executable_basename": "python.exe"
+        },
+        {
+          "pid": 2276,
+          "created_filetime": 134379618389377111,
+          "executable_basename": "conhost.exe"
+        }
+      ],
+      "job_close": {
+        "closed": true,
+        "candidate_pending_before_close": true,
+        "kill_on_close": true
+      },
+      "cleanup_exit_code": 0,
+      "remaining_owned": [],
+      "owned_exit_states": [
+        {
+          "pid": 1556,
+          "state": "exited"
+        },
+        {
+          "pid": 2276,
+          "state": "gone"
+        }
+      ],
+      "protected_ports_unchanged": true,
+      "production_hashes_unchanged": true,
+      "measurement_errors": [],
+      "persistence_errors": [],
+      "files": {
+        "checkpoint.json": {
+          "bytes": 9437,
+          "sha256": "fccf9d36814a1bfc82b41aeded1fc691e7a06f3a86da1ac15914e8a66e75113a"
+        },
+        "pre-cleanup.json": {
+          "bytes": 7386,
+          "sha256": "661601e1af9e944cd6f18fa0e8ed3d56bbb85b3f2a9a301d3acad2faa6303e45"
+        },
+        "result.json": {
+          "bytes": 9486,
+          "sha256": "03b0b60462c1e37a24a1266d3c9e70943aeb347ad0fc1353e9efe1a6d6441910"
+        }
+      }
+    }
+  ]
+}
