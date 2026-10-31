@@ -89,7 +89,7 @@ class WindowsBackend:
     def poll(self):return self.process.poll() if self.process else None
 
     def sample(self):
-        sample={'errors':[],'owned':[],'stop_causes':[]}
+        sample={'errors':[],'owned':[],'stop_causes':[],'monotonic_ns':time.monotonic_ns()}
         def attempt(phase,call):
             try:return call()
             except Exception as exc:
@@ -196,6 +196,12 @@ class WindowsBackend:
                 self.process.wait(timeout=3)
                 return {'unassigned_suspended_candidate_terminated':True}
             (self.runtime/'stop').write_text('stop',encoding='ascii')
+            if self.journal.data.get('stop_reason') in (
+                'available_RAM_below_1.5GiB','CPU_sustained_80_percent','measurement_error',
+                'protected_port_changed','production_file_changed','unexpected_owned_executable'):
+                # Release owned memory promptly; do not wait 3s while a model loads.
+                return {'exit_code_before_job_close':self.poll(),'cooperative_grace_seconds':0,
+                        'reason':'urgent_stop_no_grace'}
             try:self.process.wait(timeout=.2 if self.dummy else 3)
             except subprocess.TimeoutExpired:pass
         return {'exit_code_before_job_close':self.poll()}

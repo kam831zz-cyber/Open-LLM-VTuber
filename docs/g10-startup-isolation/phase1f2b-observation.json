@@ -1,0 +1,210 @@
+{
+  "phase": "1F-2B",
+  "executed_sha": "19ca3e7c727e7d3810d9adff4585028534c20d72",
+  "openllm_start_count": 1,
+  "preflight_regression_tests": {
+    "run": 70,
+    "failures": 0,
+    "errors": 0
+  },
+  "candidate_launcher_pid": 5340,
+  "backend_python_pid": 15180,
+  "console_host_pid": 15160,
+  "candidate_identity": {
+    "created_filetime": 134379623386751229,
+    "executable_basename": "python.exe"
+  },
+  "stop_reason": "available_RAM_below_1.5GiB",
+  "stop_causes": [
+    "available_RAM_below_1.5GiB"
+  ],
+  "stop_elapsed_s": 33.406,
+  "total_seconds": 36.531,
+  "exit_code": 0,
+  "exit_interpretation": "JOB_TERMINATION_NOT_NORMAL_APPLICATION_EXIT",
+  "supervisor_errors": [],
+  "persistence_errors": [],
+  "before": {
+    "available_bytes": 2541772800,
+    "commit_headroom_bytes": 4708868096
+  },
+  "sample_count": 15,
+  "system_cpu_percent_min": 14.44,
+  "system_cpu_percent_max": 47.82,
+  "minimum_sample_available_bytes": 1222762496,
+  "available_bytes_during_cleanup": 72642560,
+  "backend_peak_sample_working_set_bytes": 613494784,
+  "backend_peak_sample_private_bytes": 856494080,
+  "stages": [
+    {
+      "stage": "python_native_import_begin",
+      "elapsed_s": 0.188
+    },
+    {
+      "stage": "python_native_import_complete",
+      "elapsed_s": 9.922
+    },
+    {
+      "stage": "configuration_validated",
+      "elapsed_s": 9.969,
+      "asr": "small",
+      "llm": "qwen2.5:3b",
+      "model_lease_seconds": 60
+    },
+    {
+      "stage": "asr_file_resolution_begin",
+      "elapsed_s": 9.985
+    },
+    {
+      "stage": "asr_file_resolution_complete",
+      "elapsed_s": 10.0
+    },
+    {
+      "stage": "asr_native_import_begin",
+      "elapsed_s": 10.0
+    },
+    {
+      "stage": "asr_native_import_complete",
+      "elapsed_s": 23.172
+    },
+    {
+      "stage": "mcp_discovery_begin",
+      "elapsed_s": 25.704,
+      "count": 1
+    },
+    {
+      "stage": "mcp_discovery_complete",
+      "elapsed_s": 25.75,
+      "count": 1,
+      "availability": {
+        "ddg-search": {
+          "state": "unavailable",
+          "required": false,
+          "reason": "RuntimeError"
+        },
+        "weather": {
+          "state": "unavailable",
+          "required": true,
+          "reason": "RuntimeError"
+        },
+        "komugi-context": {
+          "state": "unavailable",
+          "required": true,
+          "reason": "RuntimeError"
+        },
+        "komugi-weather-ai": {
+          "state": "unavailable",
+          "required": true,
+          "reason": "RuntimeError"
+        }
+      }
+    },
+    {
+      "stage": "ollama_preload_begin",
+      "elapsed_s": 26.36
+    }
+  ],
+  "stage_resource_values": "UNAVAILABLE_NO_COMMON_CLOCK_IN_EXECUTED_VERSION",
+  "stage_resource_null_fields": [
+    "cpu_percent",
+    "available_bytes",
+    "working_set_bytes",
+    "private_bytes"
+  ],
+  "model_construct_exact_seconds": null,
+  "asr_native_import_seconds": 13.172,
+  "asr_file_resolution_seconds": 0.015,
+  "initial_python_import_seconds": 9.734,
+  "asr_constructor_and_following_setup_upper_bound_seconds": 2.532,
+  "mcp_discovery_count": 1,
+  "mcp_rediscovery_count": 0,
+  "websocket_sessions": 0,
+  "http": null,
+  "readiness": "UNCONFIRMED",
+  "conversation_core_ready": null,
+  "required_mcp_ready": false,
+  "llm_response": "NOT_TESTED",
+  "tts_audio": "NOT_TESTED",
+  "speaker_output": "NOT_TESTED",
+  "command_center_18000": "STOPPED_NO_SUBSTITUTION_WITH_18081",
+  "ollama_models_before": [],
+  "ollama_models_after": [],
+  "ollama_preload": "STARTED_NO_COMPLETION_RECORDED",
+  "ollama_specific_ram_increment_bytes": null,
+  "model_downloads": 0,
+  "text_inference_requests": 0,
+  "tts_generation_requests": 0,
+  "job_close": {
+    "closed": true,
+    "candidate_pending_before_close": true,
+    "kill_on_close": true
+  },
+  "cleanup": {
+    "owned_statuses": [
+      {
+        "pid": 5340,
+        "state": "exited"
+      },
+      {
+        "pid": 15160,
+        "state": "gone"
+      },
+      {
+        "pid": 15180,
+        "state": "exited"
+      }
+    ],
+    "remaining_owned": [],
+    "after": {
+      "available_bytes": 72642560,
+      "commit_headroom_bytes": 2044874752
+    },
+    "protected_ports_unchanged": true,
+    "production_hashes_unchanged": true,
+    "test_port_released": true,
+    "production_port_unused": true
+  },
+  "raw_diagnostic_files": {
+    "checkpoint.json": {
+      "bytes": 26844,
+      "sha256": "c6efedc2146cb060c550ae535b727e5127b2a366869188b9981b7c89a82f8fc7"
+    },
+    "pre-cleanup.json": {
+      "bytes": 24327,
+      "sha256": "5e9eb0d3b9ecd2a4aa498fcb6c632aaaf0b6798a702cb7481ae02ad9ed9d772e"
+    },
+    "result.json": {
+      "bytes": 26894,
+      "sha256": "8c9d85b83b3a89a9b03f1f8a7178ad75461cc9ab79a639e6e75ee2527711f0b5"
+    },
+    "stages.jsonl": {
+      "bytes": 1042,
+      "sha256": "7394898cec837b537fe519dfb2c262cedd0edff6cf8b4355e064bde36b24d58f"
+    }
+  },
+  "subsequent_real_start_performed": false,
+  "advance_to_text_or_audio_test": false,
+  "post_checks": {
+    "available_GiB": 2.535,
+    "cpu_percent_samples": [
+      1,
+      19,
+      7
+    ],
+    "ha_vm": "running",
+    "code_integrity_3033_3077_new_count": 0,
+    "frontend_staged_deletions": 226,
+    "production_head_unchanged": true,
+    "production_index_and_settings_hashes_unchanged": true,
+    "protected_port_owners": {
+      "18873": 5836,
+      "18874": 13836,
+      "18875": 15720,
+      "18876": 12708,
+      "18081": 8548,
+      "5005": 14196,
+      "11434": 13840,
+      "50021": 13636
+    }
+  }
+}

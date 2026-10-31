@@ -23,7 +23,8 @@ started = time.monotonic()
 
 
 def emit(stage, **fields):
-    record = {'stage': stage, 'elapsed_s': round(time.monotonic()-started, 3), **fields}
+    record = {'stage': stage, 'elapsed_s': round(time.monotonic()-started, 3),
+              'monotonic_ns':time.monotonic_ns(), **fields}
     with (runtime / 'stages.jsonl').open('a', encoding='utf-8') as f:
         f.write(json.dumps(record, ensure_ascii=True) + '\n')
 
@@ -93,6 +94,12 @@ async def main():
         emit('asr_file_resolution_complete')
         return value
     asr.resolve_local_model = timed_resolve
+    asr_init=asr.VoiceRecognition.__init__
+    def measured_asr_init(self,*a,**kw):
+        asr_init(self,*a,**kw)
+        # Persist immediately: a later blocking Ollama preload must not hide ASR timings.
+        emit('asr_model_construct_complete',**self.initialization_metrics)
+    asr.VoiceRecognition.__init__=measured_asr_init
     original_import = builtins.__import__
     def timed_import(name, *a, **kw):
         if name == 'faster_whisper':

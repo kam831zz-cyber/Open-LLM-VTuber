@@ -2,10 +2,19 @@
 import os
 from pathlib import Path
 import sys
+import subprocess
 
 
 def install(runtime, *, port=None, ollama=False):
     runtime = Path(runtime).resolve()
+    # Windows audits Popen after list2cmdline conversion. Accept only exact
+    # serializations of our fixed argv, never parse arbitrary command strings.
+    root=Path(__file__).resolve().parents[2]
+    entries=[('ddg','-')]+[('script',str((root/'scripts'/name).resolve())) for name in
+        ('weather_mcp_server.py','komugi_context_mcp_server.py','komugi_weather_ai_mcp_server.py')]
+    allowed_argv={tuple([sys.executable,'-I','-B',str(Path(__file__).resolve()),'--child',str(runtime),kind,target])
+                  for kind,target in entries} if port else set()
+    allowed_windows={subprocess.list2cmdline(argv) for argv in allowed_argv}
     def inside(value):
         try:
             return Path(value).resolve().is_relative_to(runtime)
@@ -40,11 +49,12 @@ def install(runtime, *, port=None, ollama=False):
                 raise PermissionError('trial_bind_forbidden')
         if event == 'subprocess.Popen':
             command = args[1]
-            if not (port and isinstance(command, (list, tuple)) and len(command) >= 6
-                    and Path(command[0]).resolve() == Path(sys.executable).resolve()
-                    and command[1:3] == ['-I', '-B']
-                    and Path(command[3]).resolve() == Path(__file__).resolve()
-                    and command[4] == '--child'):
+            exact=(command in allowed_windows if isinstance(command,str) else
+                   tuple(command) in allowed_argv if isinstance(command,(list,tuple)) else False)
+            executable=args[0]
+            if not (port and exact
+                    and (executable is None or Path(executable).resolve()==Path(sys.executable).resolve())
+                    and args[2] is not None and Path(args[2]).resolve()==runtime):
                 raise PermissionError('trial_subprocess_forbidden')
         if event == 'os.system':
             raise PermissionError('trial_shell_forbidden')
