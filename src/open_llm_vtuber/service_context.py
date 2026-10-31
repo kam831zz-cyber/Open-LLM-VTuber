@@ -97,6 +97,8 @@ class ServiceContext:
 
     async def _init_mcp_components(self, use_mcpp, enabled_servers):
         """Initializes MCP components based on configuration, dynamically fetching tool info."""
+        self._mcp_enabled = use_mcpp
+        self._mcp_expected_servers = tuple(enabled_servers or ())
         logger.debug(
             f"Initializing MCP components: use_mcpp={use_mcpp}, enabled_servers={enabled_servers}"
         )
