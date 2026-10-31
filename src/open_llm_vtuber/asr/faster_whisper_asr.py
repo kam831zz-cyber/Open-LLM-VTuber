@@ -2,9 +2,9 @@ import os
 import time
 
 import numpy as np
-from faster_whisper import WhisperModel
 from loguru import logger
 from .asr_interface import ASRInterface
+from .local_model import resolve_local_model
 
 
 class VoiceRecognition(ASRInterface):
@@ -23,12 +23,27 @@ class VoiceRecognition(ASRInterface):
         self.MODEL_PATH = model_path
         self.LANG = language
         self.prompt = prompt
+        started = time.perf_counter()
+        cpu_started = time.process_time()
+        local_path = resolve_local_model(model_path, download_root)
+        resolved = time.perf_counter()
+        from faster_whisper import WhisperModel
+        imported = time.perf_counter()
         self.model = WhisperModel(
-            model_size_or_path=model_path,
-            download_root=download_root,
+            model_size_or_path=str(local_path),
+            local_files_only=True,
             device=device,
             compute_type=compute_type,
         )
+        finished = time.perf_counter()
+        self.initialization_metrics = {
+            "resolve_ms": round((resolved-started)*1000),
+            "native_import_ms": round((imported-resolved)*1000),
+            "model_construct_ms": round((finished-imported)*1000),
+            "total_ms": round((finished-started)*1000),
+            "cpu_ms": round((time.process_time()-cpu_started)*1000),
+        }
+        logger.info("ASR initialization phases (local-only): {}", self.initialization_metrics)
 
     def transcribe_np(self, audio: np.ndarray) -> str:
         diagnostic = os.getenv("KOMUGI_ASR_DIAGNOSTICS", "").lower() in {

@@ -1,0 +1,10 @@
+{
+  "run": 36,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "real_model_loads": 0,
+  "real_mcp_processes": 0,
+  "native_imports_blocked": true,
+  "network_connections_blocked": true
+}

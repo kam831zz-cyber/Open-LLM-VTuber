@@ -38,6 +38,7 @@ class OllamaLLM(AsyncLLM):
                         "model": model,
                         "keep_alive": keep_alive,
                     },
+                    timeout=(3, 30),
                 )
             )
         except requests.exceptions.ConnectionError as e:
@@ -68,6 +69,7 @@ class OllamaLLM(AsyncLLM):
                         "model": self.model,
                         "keep_alive": 0,
                     },
+                    timeout=(3, 5),
                 )
             )
             self.cleaned = True

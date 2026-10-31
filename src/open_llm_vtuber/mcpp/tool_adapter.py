@@ -1,6 +1,7 @@
 """Constructs prompts for servers and tools, formats tool information for OpenAI API."""
 
 import asyncio
+from copy import deepcopy
 from typing import Dict, Optional, List, Tuple, Any
 from loguru import logger
 
@@ -15,6 +16,9 @@ class ToolAdapter:
     def __init__(self, server_registery: Optional[ServerRegistry] = None) -> None:
         """Initialize with an ServerRegistry."""
         self.server_registery = server_registery or ServerRegistry()
+        self._discovery_lock = asyncio.Lock()
+        self._definitions = {}
+        self.availability = {}
 
     async def get_server_and_tool_info(
         self, enabled_servers: List[str]
@@ -34,6 +38,8 @@ class ToolAdapter:
         tasks = []
         for server_name in enabled_servers:
             if server_name not in self.server_registery.servers:
+                self.availability[server_name] = {"state": "unavailable", "required": server_name != "ddg-search",
+                    "reason": getattr(self.server_registery, "unavailable", {}).get(server_name, "not_configured")}
                 logger.warning(
                     f"MC: Enabled server '{server_name}' not found in Server Manager. Skipping."
                 )
@@ -59,7 +65,9 @@ class ToolAdapter:
 
         try:
             async with MCPClient(self.server_registery) as client:
-                tools = await client.list_tools(server_name)
+                limit = 5 if server_name == "ddg-search" else 10
+                async with asyncio.timeout(limit):
+                    tools = await client.list_tools(server_name)
                 logger.debug(f"MC: Found {len(tools)} tools on server '{server_name}'")
                 for tool in tools:
                     tool_info = {
@@ -74,10 +82,16 @@ class ToolAdapter:
                         description=tool.description,
                         generic_schema=None,
                     )
-        except (ValueError, RuntimeError, ConnectionError) as e:
-            logger.error(f"MC: Failed to get info for server '{server_name}': {e}")
+            self.availability[server_name] = {"state": "ready", "required": server_name != "ddg-search"}
+        except TimeoutError:
+            self.availability[server_name] = {"state": "timeout", "required": server_name != "ddg-search"}
+            server_tools.clear()
+            formatted_tools.clear()
         except Exception as e:
-            logger.error(f"MC: Unexpected error for server '{server_name}': {e}")
+            self.availability[server_name] = {"state": "unavailable", "required": server_name != "ddg-search",
+                                              "reason": type(e).__name__}
+            server_tools.clear()
+            formatted_tools.clear()
 
         return server_name, server_tools, formatted_tools
 
@@ -227,10 +241,11 @@ class ToolAdapter:
         logger.info(
             f"MC: Running dynamic tool construction for servers: {enabled_servers}"
         )
-        servers_info, formatted_tools_dict = await self.get_server_and_tool_info(
-            enabled_servers
-        )
-        mcp_prompt_string = self.construct_mcp_prompt_string(servers_info)
-        openai_tools, claude_tools = self.format_tools_for_api(formatted_tools_dict)
-        logger.info("MC: Dynamic tool construction complete.")
-        return mcp_prompt_string, openai_tools, claude_tools, formatted_tools_dict
+        key = tuple(dict.fromkeys(enabled_servers))
+        async with self._discovery_lock:
+            if key not in self._definitions:
+                servers_info, formatted_tools_dict = await self.get_server_and_tool_info(key)
+                mcp_prompt_string = self.construct_mcp_prompt_string(servers_info)
+                openai_tools, claude_tools = self.format_tools_for_api(formatted_tools_dict)
+                self._definitions[key] = (mcp_prompt_string, openai_tools, claude_tools, formatted_tools_dict)
+            return deepcopy(self._definitions[key])

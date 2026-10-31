@@ -73,6 +73,7 @@ class ServiceContext:
 
         self.send_text: Callable = None
         self.client_uid: str = None
+        self._owns_agent = True
 
     def __str__(self):
         return (
@@ -100,7 +101,9 @@ class ServiceContext:
             f"Initializing MCP components: use_mcpp={use_mcpp}, enabled_servers={enabled_servers}"
         )
 
-        # Reset MCP components first
+        if self.mcp_client:
+            await self.mcp_client.aclose()
+        # Share definitions, never session transport/callbacks/executors.
         self.mcp_server_registery = None
         self.tool_manager = None
         self.mcp_client = None
@@ -110,7 +113,7 @@ class ServiceContext:
 
         if use_mcpp and enabled_servers:
             # 1. Initialize ServerRegistry
-            self.mcp_server_registery = ServerRegistry()
+            self.mcp_server_registery = self.tool_adapter.server_registery if self.tool_adapter else ServerRegistry()
             logger.info("ServerRegistry initialized or referenced.")
 
             # 2. Use ToolAdapter to get the MCP prompt and tools
@@ -194,7 +197,7 @@ class ServiceContext:
             logger.info(f"Closing MCPClient for context instance {id(self)}...")
             await self.mcp_client.aclose()
             self.mcp_client = None
-        if self.agent_engine and hasattr(self.agent_engine, "close"):
+        if self._owns_agent and self.agent_engine and hasattr(self.agent_engine, "close"):
             await self.agent_engine.close()  # Ensure agent resources are also closed
         logger.info("ServiceContext closed.")
 
@@ -231,6 +234,7 @@ class ServiceContext:
         self.tts_engine = tts_engine
         self.vad_engine = vad_engine
         self.agent_engine = agent_engine
+        self._owns_agent = False
         self.translate_engine = translate_engine
         self.init_komugi_fast_path()
         # Load potentially shared components by reference
@@ -244,6 +248,10 @@ class ServiceContext:
             self.character_config.agent_config.agent_settings.basic_memory_agent.use_mcpp,
             self.character_config.agent_config.agent_settings.basic_memory_agent.mcp_enabled_servers,
         )
+
+        if not hasattr(agent_engine, "for_session"):
+            raise RuntimeError("Agent does not support isolated session state")
+        self.agent_engine = agent_engine.for_session(self.tool_manager, self.tool_executor, self.mcp_prompt)
 
         logger.debug(f"Loaded service context with cache: {character_config}")
 
@@ -394,6 +402,7 @@ class ServiceContext:
                 tool_executor=self.tool_executor,
                 mcp_prompt_string=self.mcp_prompt,
             )
+            self._owns_agent = True
 
             logger.debug(f"Agent choice: {agent_config.conversation_agent_choice}")
             logger.debug(f"System prompt: {system_prompt}")

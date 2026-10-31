@@ -7,6 +7,7 @@ import numpy as np
 from loguru import logger
 
 from .service_context import ServiceContext
+from .startup_status import conversation_status
 from .chat_group import (
     ChatGroupManager,
     handle_group_operation,
@@ -125,7 +126,7 @@ class WebSocketHandler:
 
             logger.info(f"Connection established for client {client_uid}")
 
-        except Exception as e:
+        except BaseException as e:
             logger.error(
                 f"Failed to initialize connection for client {client_uid}: {e}"
             )
@@ -153,8 +154,15 @@ class WebSocketHandler:
         session_service_context: ServiceContext,
     ):
         """Send initial connection messages to the client"""
+        status = conversation_status(session_service_context)
+        await websocket.send_text(json.dumps({"type": "service-status", **status}))
+        unavailable = [name for name, value in status["mcp"].items() if value["state"] != "ready"]
+        notice = "Connection established"
+        if unavailable:
+            notice += "。利用できない連携機能: " + ", ".join(unavailable)
+        notice += "。生活情報APIの到達性は未確認です。"
         await websocket.send_text(
-            json.dumps({"type": "full-text", "text": "Connection established"})
+            json.dumps({"type": "full-text", "text": notice})
         )
 
         await websocket.send_text(
@@ -180,25 +188,29 @@ class WebSocketHandler:
     ) -> ServiceContext:
         """Initialize service context for a new session by cloning the default context"""
         session_service_context = ServiceContext()
-        await session_service_context.load_cache(
-            config=self.default_context_cache.config.model_copy(deep=True),
-            system_config=self.default_context_cache.system_config.model_copy(
-                deep=True
-            ),
-            character_config=self.default_context_cache.character_config.model_copy(
-                deep=True
-            ),
-            live2d_model=self.default_context_cache.live2d_model,
-            asr_engine=self.default_context_cache.asr_engine,
-            tts_engine=self.default_context_cache.tts_engine,
-            vad_engine=self.default_context_cache.vad_engine,
-            agent_engine=self.default_context_cache.agent_engine,
-            translate_engine=self.default_context_cache.translate_engine,
-            mcp_server_registery=self.default_context_cache.mcp_server_registery,
-            tool_adapter=self.default_context_cache.tool_adapter,
-            send_text=send_text,
-            client_uid=client_uid,
-        )
+        try:
+            await session_service_context.load_cache(
+                config=self.default_context_cache.config.model_copy(deep=True),
+                system_config=self.default_context_cache.system_config.model_copy(
+                    deep=True
+                ),
+                character_config=self.default_context_cache.character_config.model_copy(
+                    deep=True
+                ),
+                live2d_model=self.default_context_cache.live2d_model,
+                asr_engine=self.default_context_cache.asr_engine,
+                tts_engine=self.default_context_cache.tts_engine,
+                vad_engine=self.default_context_cache.vad_engine,
+                agent_engine=self.default_context_cache.agent_engine,
+                translate_engine=self.default_context_cache.translate_engine,
+                mcp_server_registery=self.default_context_cache.mcp_server_registery,
+                tool_adapter=self.default_context_cache.tool_adapter,
+                send_text=send_text,
+                client_uid=client_uid,
+            )
+        except BaseException:
+            await session_service_context.close()
+            raise
         return session_service_context
 
     async def handle_websocket_communication(
@@ -317,7 +329,9 @@ class WebSocketHandler:
     async def _cleanup_failed_connection(self, client_uid: str) -> None:
         """Clean up failed connection data"""
         self.client_connections.pop(client_uid, None)
-        self.client_contexts.pop(client_uid, None)
+        context = self.client_contexts.pop(client_uid, None)
+        if context:
+            await context.close()
         self.received_data_buffers.pop(client_uid, None)
         self.chat_group_manager.client_group_map.pop(client_uid, None)
 

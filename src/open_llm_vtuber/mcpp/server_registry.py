@@ -2,6 +2,8 @@
 
 import shutil
 import json
+import sys
+from importlib import metadata
 
 from datetime import timedelta
 from pathlib import Path
@@ -34,6 +36,7 @@ class ServerRegistry:
         )
 
         self.servers: Dict[str, MCPServer] = {}
+        self.unavailable = {}
 
         self.npx_available = self._detect_runtime("npx")
         self.uvx_available = self._detect_runtime("uvx")
@@ -61,6 +64,23 @@ class ServerRegistry:
                 continue
 
             command = server_details["command"]
+            args = server_details["args"]
+            if server_name == "ddg-search":
+                try:
+                    package = metadata.distribution("duckduckgo-mcp-server")
+                    if not any(e.name == "duckduckgo-mcp-server" and e.value == "duckduckgo_mcp_server.server:main"
+                               for e in package.entry_points):
+                        raise ValueError("Unsupported local entry point")
+                except (metadata.PackageNotFoundError, ValueError):
+                    self.unavailable[server_name] = "local_package_unavailable"
+                    continue
+                command = sys.executable
+                args = ["-c", "from duckduckgo_mcp_server.server import main; main()"]
+            elif Path(command).name.lower() in {"uvx", "uvx.exe", "npx", "npx.cmd", "uv", "uv.exe", "pip", "pip.exe", "pip3"}:
+                self.unavailable[server_name] = "package_launcher_forbidden"
+                continue
+            elif Path(command).name.lower() in {"python", "python.exe", "python3"}:
+                command = sys.executable
             if command == "npx":
                 if not self.npx_available:
                     logger.warning(
@@ -84,8 +104,9 @@ class ServerRegistry:
             self.servers[server_name] = MCPServer(
                 name=server_name,
                 command=command,
-                args=server_details["args"],
-                env=server_details.get("env", None),
+                args=args,
+                env={**(server_details.get("env") or {}), "UV_OFFLINE": "1",
+                     "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
                 cwd=server_details.get("cwd", None),
                 timeout=_parse_timeout(server_details.get("timeout", None)),
             )

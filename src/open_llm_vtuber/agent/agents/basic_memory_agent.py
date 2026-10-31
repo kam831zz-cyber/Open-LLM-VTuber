@@ -41,6 +41,27 @@ class BasicMemoryAgent(AgentInterface):
 
     _system: str = "You are a helpful assistant."
 
+    def for_session(self, tool_manager, tool_executor, mcp_prompt_string):
+        """Fresh memory/interrupt/parser state, reusing the stateless LLM only.
+
+        Do not call AgentFactory here: constructing OllamaLLM would preload a
+        model again. A new constructor binds chat closures to this new agent.
+        """
+        from copy import deepcopy
+        child = BasicMemoryAgent(
+            llm=self._llm, system=self._system, live2d_model=self._live2d_model,
+            tts_preprocessor_config=self._tts_preprocessor_config,
+            faster_first_response=self._faster_first_response,
+            segment_method=self._segment_method, use_mcpp=self._use_mcpp,
+            interrupt_method=self.interrupt_method, tool_prompts=deepcopy(self._tool_prompts),
+            tool_manager=tool_manager, tool_executor=tool_executor,
+            mcp_prompt_string=mcp_prompt_string,
+            command_center_base_url=self._command_center_base_url)
+        # Preserve the already-rendered system prompt without appending the
+        # interruption hint a second time on every session.
+        child._system = self._system
+        return child
+
     def __init__(
         self,
         llm: StatelessLLMInterface,

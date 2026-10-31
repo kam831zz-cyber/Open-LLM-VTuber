@@ -1,6 +1,6 @@
 """MCP Client for Open-LLM-Vtuber."""
 
-from contextlib import AsyncExitStack
+import asyncio
 from typing import Dict, Any, List, Callable
 from loguru import logger
 from datetime import timedelta
@@ -10,6 +10,7 @@ from mcp.types import Tool
 from mcp.client.stdio import stdio_client
 
 from .server_registry import ServerRegistry
+from .owned_session import OwnedSession
 
 DEFAULT_TIMEOUT = timedelta(seconds=30)
 
@@ -26,7 +27,9 @@ class MCPClient:
         client_uid: str = None,
     ) -> None:
         """Initialize the MCP Client."""
-        self.exit_stack: AsyncExitStack = AsyncExitStack()
+        self._connections = {}
+        self._connect_lock = asyncio.Lock()
+        self._closed = False
         self.active_sessions: Dict[str, ClientSession] = {}
         self._list_tools_cache: Dict[str, List[Tool]] = {}  # Cache for list_tools
         self._send_text: Callable = send_text
@@ -44,8 +47,15 @@ class MCPClient:
         self, server_name: str
     ) -> ClientSession:
         """Gets the existing session or creates a new one."""
-        if server_name in self.active_sessions:
-            return self.active_sessions[server_name]
+        async with self._connect_lock:
+            if self._closed:
+                raise RuntimeError("MCPClient is closed")
+            return await self._connect(server_name)
+
+    async def _connect(self, server_name):
+        existing = self._connections.get(server_name)
+        if existing and not existing.task.done():
+            return await asyncio.shield(existing.ready)
 
         logger.info(f"MCPC: Starting and connecting to server '{server_name}'...")
         server = self.server_registery.get_server(server_name)
@@ -60,22 +70,29 @@ class MCPClient:
             command=server.command, args=server.args, env=server.env, cwd=server.cwd
         )
 
+        owned = OwnedSession(lambda: stdio_client(server_params),
+                             lambda read, write: ClientSession(read, write, read_timeout_seconds=timeout),
+                             timeout.total_seconds(), min(timeout.total_seconds(),
+                                                         5 if server_name == "ddg-search" else 10))
+        self._connections[server_name] = owned
         try:
-            stdio_transport = await self.exit_stack.enter_async_context(
-                stdio_client(server_params)
-            )
-            read, write = stdio_transport
-
-            session = await self.exit_stack.enter_async_context(
-                ClientSession(read, write, read_timeout_seconds=timeout)
-            )
-            await session.initialize()
-
+            session = await asyncio.shield(owned.ready)
             self.active_sessions[server_name] = session
             logger.info(f"MCPC: Successfully connected to server '{server_name}'.")
             return session
-        except Exception as e:
-            logger.exception(f"MCPC: Failed to connect to server '{server_name}': {e}")
+        except BaseException as e:
+            try:
+                await owned.aclose()
+            except BaseException as cleanup_error:
+                if cleanup_error is not e:
+                    raise
+            finally:
+                self._connections.pop(server_name, None)
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            if isinstance(e, TimeoutError):
+                raise
+            logger.warning("MCP initialization unavailable: server={} error={}", server_name, type(e).__name__)
             raise RuntimeError(
                 f"MCPC: Failed to connect to server '{server_name}'."
             ) from e
@@ -159,15 +176,19 @@ class MCPClient:
         logger.info(
             f"MCPC: Closing client instance and {len(self.active_sessions)} active connections..."
         )
-        try:
-            await self.exit_stack.aclose()
-        except Exception as e:
-            if not _is_process_lookup_error(e):
-                raise
-            logger.debug("MCPC: Ignoring already-exited MCP process during close.")
+        self._closed = True
+        errors = []
+        for owned in list(self._connections.values()):
+            try:
+                await owned.aclose()
+            except Exception as exc:
+                if not _is_process_lookup_error(exc):
+                    errors.append(exc)
+        self._connections.clear()
         self.active_sessions.clear()
         self._list_tools_cache.clear()  # Clear cache on close
-        self.exit_stack = AsyncExitStack()
+        if errors:
+            raise ExceptionGroup("MCP cleanup failed", errors)
         logger.info("MCPC: Client instance closed.")
 
     async def __aenter__(self) -> "MCPClient":

@@ -103,6 +103,12 @@ class KomugiFastPathClient:
             data = response.json()
         except Exception as exc:
             logger.warning(f"Komugi Fast Path unavailable: {type(exc).__name__}")
+            normalized = text.strip().rstrip("？?。!")
+            if normalized in {"今何時", "今の時刻は", "今日のゴミは", "明日のゴミは", "今日のごみは", "明日のごみは"}:
+                return KomugiFastPathResult(
+                    handled=True, request_id=request_id,
+                    response="生活情報を取得できませんでした。Command Centerへの接続・取得を確認できていません。",
+                    error="command_center_unavailable", http_roundtrip_ms=_elapsed_ms(start))
             if weather_fallback_result is not None:
                 weather_fallback_result.handled = True
                 weather_fallback_result.response = weather_fallback_result.response or _jp(r"\u5929\u6c17\u60c5\u5831\u3092\u78ba\u8a8d\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002")
