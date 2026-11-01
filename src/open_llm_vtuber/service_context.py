@@ -288,7 +288,10 @@ class ServiceContext:
         # update all sub-configs
 
         # init live2d from character config
-        self.init_live2d(config.character_config.live2d_model_name)
+        if self.staged_controller is not None and not self.staged_controller.audio_enabled:
+            self.live2d_model = None  # Room owns visual assets; text API does not require them
+        else:
+            self.init_live2d(config.character_config.live2d_model_name)
 
         # init asr from character config
         if self.staged_controller is None:
@@ -297,7 +300,10 @@ class ServiceContext:
             await self.staged_controller.prepare_asr(self, config.character_config.asr_config)
 
         # init tts from character config
-        self.init_tts(config.character_config.tts_config)
+        if self.staged_controller is not None and not self.staged_controller.audio_enabled:
+            self.tts_engine = None
+        else:
+            self.init_tts(config.character_config.tts_config)
 
         # init vad from character config
         if self.staged_controller is None:
@@ -370,6 +376,9 @@ class ServiceContext:
             logger.info("ASR already initialized with the same config.")
 
     def init_tts(self, tts_config: TTSConfig) -> None:
+        if self.staged_controller is not None and not self.staged_controller.audio_enabled:
+            self.tts_engine = None
+            return
         if self.staged_controller is not None and tts_config.tts_model != "voicevox_tts":
             raise RuntimeError("staged_tts_provider_not_supported")
         if not self.tts_engine or (self.character_config.tts_config != tts_config):
@@ -503,6 +512,9 @@ class ServiceContext:
         Returns:
         - str: The system prompt with all tool prompts appended.
         """
+        if self.staged_controller is not None and not self.staged_controller.audio_enabled:
+            return persona_prompt  # no audio/Live2D/tool prompt dependencies for plain text
+
         logger.debug(f"constructing persona_prompt: '''{persona_prompt}'''")
 
         for prompt_name, prompt_file in self.system_config.tool_prompts.items():

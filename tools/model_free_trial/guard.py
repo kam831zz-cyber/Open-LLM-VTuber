@@ -33,11 +33,13 @@ def install(runtime, port):
 
 class ReadinessOnly:
     """ASGI barrier: no API side effects or conversation messages in first trial."""
-    def __init__(self, app): self.app = app
+    def __init__(self, app, *, text_status=False):
+        self.app = app
+        self.read_paths = {'/openapi.json'} | ({'/api/text/status'} if text_status else set())
 
     async def __call__(self, scope, receive, send):
         if scope['type'] == 'http':
-            if scope.get('method') != 'GET' or scope.get('path') != '/openapi.json':
+            if scope.get('method') != 'GET' or scope.get('path') not in self.read_paths:
                 await send({'type':'http.response.start','status':403,'headers':[]})
                 await send({'type':'http.response.body','body':b'trial_readiness_only'})
                 return

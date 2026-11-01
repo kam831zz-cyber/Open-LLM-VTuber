@@ -1509,6 +1509,20 @@ class BasicMemoryAgent(AgentInterface):
 
         return chat_with_memory
 
+    async def text_chat(self, text):
+        """Single-session text-only transport; no prefetch, tools, TTS or UI actions."""
+        messages = [*self._memory, {"role":"user", "content":text}]
+        response = ""
+        from contextlib import aclosing
+        async with aclosing(self._llm.text_completion(messages, self._system)) as stream:
+            async for chunk in stream:
+                response += chunk
+                if len(response) > 16384: raise RuntimeError("text_response_too_large")
+                yield chunk
+        if not response.strip(): raise RuntimeError("empty_text_response")
+        self._add_message(text, "user")
+        self._add_message(response, "assistant")
+
     async def chat(
         self,
         input_data: BatchInput,

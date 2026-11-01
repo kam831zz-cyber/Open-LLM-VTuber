@@ -8,6 +8,7 @@ import time
 from open_llm_vtuber.model_loading_policy import AdmissionDenied, GIB, Reading
 
 PROFILE = 'model-free-v1:mcp-off:asr-off:ollama-preload-off:voicevox-wrapper'
+TEXT_PROFILE = 'text-only-v1:mcp-off:asr-off:tts-off:ollama-preload-off'
 
 
 @dataclass(frozen=True)
@@ -26,10 +27,10 @@ class Observation:
     captured_at: float
 
 
-def admit_server(budget, observation, *, clock=time.monotonic, offline=False):
+def admit_server(budget, observation, *, clock=time.monotonic, offline=False, profile=PROFILE):
     now = clock()
     allowed = ('measured', 'fixture') if offline else ('measured',)
-    if (budget.evidence not in allowed or not budget.evidence_id or budget.profile != PROFILE
+    if (budget.evidence not in allowed or not budget.evidence_id or budget.profile != profile
             or type(budget.physical_peak_bytes) is not int or type(budget.commit_peak_bytes) is not int
             or budget.physical_peak_bytes <= 0 or budget.commit_peak_bytes <= 0):
         raise AdmissionDenied('server_budget_unmeasured_or_wrong_profile')
@@ -47,7 +48,7 @@ def admit_server(budget, observation, *, clock=time.monotonic, offline=False):
         raise AdmissionDenied('server_physical_budget_insufficient')
     if reading.commit_headroom_bytes < int(.25*GIB) + budget.commit_peak_bytes:
         raise AdmissionDenied('server_commit_budget_insufficient')
-    return {'profile': PROFILE, 'admitted': True, 'models_admitted': False,
+    return {'profile': profile, 'admitted': True, 'models_admitted': False,
             'mcp_children_admitted': False}
 
 

@@ -30,7 +30,13 @@ def conversation_status(context):
         # MCP belongs to the session, model ownership to the server context.
         status.update(required_mcp_ready=ready,
                       required_mcp_state="disabled" if enabled is False else "ready" if ready else "unconfirmed")
-        status["conversation_core_constructed"] = context.agent_engine is not None and context.tts_engine is not None
+        status["conversation_core_constructed"] = (context.agent_engine is not None
+            and (not controller.audio_enabled or context.tts_engine is not None))
+        status["audio_mode"] = "enabled" if controller.audio_enabled else "disabled"
+        status["text_conversation_ready"] = (status["conversation_core_constructed"]
+            and model_status["text_model_ready"] and controller.text_requests_enabled)
+        if not controller.audio_enabled:
+            status.update(tts_audio="disabled", speaker_output="disabled")
         status["conversation_core_ready"] = (status["conversation_core_constructed"]
             and model_status["text_model_ready"]
             and (controller.policy.text_only or controller.policy.asr_mode == "disabled" or model_status["asr_ready"]))

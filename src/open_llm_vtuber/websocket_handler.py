@@ -169,7 +169,7 @@ class WebSocketHandler:
             json.dumps(
                 {
                     "type": "set-model-and-conf",
-                    "model_info": session_service_context.live2d_model.model_info,
+                    "model_info": getattr(session_service_context.live2d_model, "model_info", {}),
                     "conf_name": session_service_context.character_config.conf_name,
                     "conf_uid": session_service_context.character_config.conf_uid,
                     "client_uid": client_uid,
@@ -263,6 +263,12 @@ class WebSocketHandler:
             data: Message data
         """
         msg_type = data.get("type")
+        context = getattr(self, 'client_contexts', {}).get(client_uid)
+        controller = getattr(context, 'staged_controller', None)
+        if controller is not None and not controller.audio_enabled:
+            if msg_type not in {'text-input', 'request-init-config', 'heartbeat'}:
+                await websocket.send_text(json.dumps({'type':'error','code':'text_mode_event_forbidden'}))
+                return
         if not msg_type:
             logger.warning("Message received without type")
             return
@@ -541,6 +547,13 @@ class WebSocketHandler:
         """Handle triggers that start a conversation"""
         if data.get("type") == "mic-audio-end" and not self._microphone_allowed(client_uid):
             return
+        controller = getattr(self.client_contexts[client_uid], "staged_controller", None)
+        if controller is not None and not controller.audio_enabled:
+            from .text_conversation import run_text_turn
+            if data.get("type") != "text-input":
+                return
+            await run_text_turn(self.client_contexts[client_uid], data.get("text"), websocket.send_text)
+            return
         await handle_conversation_trigger(
             msg_type=data.get("type", ""),
             data=data,
@@ -589,6 +602,9 @@ class WebSocketHandler:
         """
         Handle audio playback start notification
         """
+        controller = getattr(self.client_contexts[client_uid], "staged_controller", None)
+        if controller is not None and not controller.audio_enabled:
+            return
         group_members = self.chat_group_manager.get_group_members(client_uid)
         if len(group_members) > 1:
             display_text = data.get("display_text")
@@ -621,7 +637,7 @@ class WebSocketHandler:
             json.dumps(
                 {
                     "type": "set-model-and-conf",
-                    "model_info": context.live2d_model.model_info,
+                    "model_info": getattr(context.live2d_model, "model_info", {}),
                     "conf_name": context.character_config.conf_name,
                     "conf_uid": context.character_config.conf_uid,
                     "client_uid": client_uid,

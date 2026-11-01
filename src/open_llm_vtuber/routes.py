@@ -31,6 +31,13 @@ def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
     @router.websocket("/client-ws")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for client connections"""
+        controller = getattr(default_context_cache, 'staged_controller', None)
+        if controller is not None and not controller.audio_enabled:
+            from .text_conversation import text_origin_allowed
+            if websocket.client is None or not text_origin_allowed(default_context_cache,
+                    websocket.client.host, websocket.headers.get('origin')):
+                await websocket.close(code=1008)
+                return
         await websocket.accept()
         client_uid = str(uuid4())
 

@@ -17,6 +17,8 @@ class StagedLoadingSettings(I18nMixin):
     text_only: bool = True
     asr_mode: Literal["disabled", "lazy", "eager"] = "disabled"
     eager_preload: bool = False
+    audio_enabled: bool = True
+    text_requests_enabled: bool = False
 
 
 class SystemConfig(I18nMixin):

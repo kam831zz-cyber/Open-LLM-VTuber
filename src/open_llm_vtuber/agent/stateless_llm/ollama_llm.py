@@ -65,6 +65,47 @@ class OllamaLLM(AsyncLLM):
         async for chunk in super().chat_completion(*args, **kwargs):
             yield chunk
 
+    async def text_completion(self, messages, system):
+        from ...model_loading_policy import AdmissionDenied, State
+        controller = self.staged_controller
+        if controller is None or not controller.text_requests_enabled:
+            raise AdmissionDenied("text_requests_disabled")
+        controller.require_llm_ready()
+        controller.runtime.admit("text_request")
+        if controller.text_inflight:
+            raise AdmissionDenied("text_request_busy")
+        controller.text_inflight = True
+        stream = None
+        completed = False
+        try:
+            # Disable SDK automatic retries; one explicit request, no tools/audio.
+            client = self.client.with_options(max_retries=0, timeout=30)
+            stream = await client.chat.completions.create(model=self.model,
+                messages=[{"role":"system","content":system}, *messages], stream=True,
+                temperature=self.temperature)
+            finish = False
+            async for chunk in stream:
+                for choice in chunk.choices:
+                    if choice.delta.tool_calls:
+                        raise RuntimeError("text_tool_output_forbidden")
+                    content = choice.delta.content
+                    if content:
+                        yield content
+                    if choice.finish_reason == "stop": finish = True
+                    elif choice.finish_reason is not None:
+                        raise RuntimeError("text_response_incomplete")
+            if not finish: raise RuntimeError("text_response_incomplete")
+            completed = True
+        finally:
+            if not completed:
+                controller.runtime.states["llm"] = State.PENDING
+                controller.runtime.uncertain = "llm"
+                controller.runtime.errors["llm"] = "text_completion_unknown"
+            try:
+                if stream is not None: await stream.close()
+            finally:
+                controller.text_inflight = False
+
     def __del__(self):
         """Destructor to unload the model"""
         self.cleanup()

@@ -52,6 +52,12 @@ class StagedController:
                  clock=time.monotonic, offline=False):
         self.policy = StartupPolicy(text_only=settings.text_only, asr_mode=settings.asr_mode,
                                     eager_preload=settings.eager_preload)
+        self.audio_enabled = getattr(settings, "audio_enabled", True)
+        self.text_requests_enabled = getattr(settings, "text_requests_enabled", False)
+        if not self.audio_enabled and (not self.policy.text_only or self.policy.asr_mode != 'disabled'
+                                       or self.policy.eager_preload):
+            raise ValueError('invalid_text_only_startup_mode')
+        self.text_inflight = False
         self.occupancy = occupancy
         self.runtime = Runtime(self.policy,
             {'llm': Model('llm', 'unbound', remote=True),
@@ -60,7 +66,11 @@ class StagedController:
             clock=clock, offline=offline)
 
     def validate_mode(self, settings):
-        if settings is None or not settings.enabled or (
+        if (settings is None or not settings.enabled
+                or getattr(settings, 'audio_enabled', True) != self.audio_enabled
+                or getattr(settings, 'text_requests_enabled', False) != self.text_requests_enabled):
+            raise AdmissionDenied('startup_mode_change_requires_new_context')
+        if (
                 settings.text_only, settings.asr_mode, settings.eager_preload) != (
                 self.policy.text_only, self.policy.asr_mode, self.policy.eager_preload):
             raise AdmissionDenied('startup_mode_change_requires_new_context')
@@ -94,7 +104,7 @@ class StagedController:
             raise AdmissionDenied('asr_replacement_requires_new_context')
         context.asr_engine = None
         self.runtime.models['asr'] = Model('asr', str(identity))
-        if not self.policy.text_only and self.policy.asr_mode == 'eager':
+        if self.audio_enabled and not self.policy.text_only and self.policy.asr_mode == 'eager':
             await self.request_model('asr')
             # No implicit call to ASRFactory: the admitted adapter owns construction.
             context.asr_engine = getattr(self, 'asr_instance', None)
@@ -113,7 +123,7 @@ class StagedController:
         self.check_occupancy(ready=True)
 
     def mic_ready(self):
-        return (not self.policy.text_only and self.policy.asr_mode != 'disabled'
+        return (self.audio_enabled and not self.policy.text_only and self.policy.asr_mode != 'disabled'
                 and self.runtime.states['asr'] == State.READY
                 and self.runtime.uncertain is None)
 
@@ -125,6 +135,7 @@ class StagedController:
             except AdmissionDenied:
                 status['text_model_ready'] = False
                 status['ollama_ownership'] = 'unconfirmed'
-        return {**status, 'startup_mode':
+        return {**status, 'audio_enabled': self.audio_enabled,
+                'text_requests_enabled': self.text_requests_enabled, 'startup_mode':
                 'text_only' if self.policy.text_only else self.policy.asr_mode,
                 'microphone_ready': self.mic_ready()}

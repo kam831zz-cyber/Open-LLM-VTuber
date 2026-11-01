@@ -94,13 +94,21 @@ class WebSocketServer:
         self.app.include_router(
             init_client_ws_route(default_context_cache=self.default_context_cache),
         )
-        self.app.include_router(
-            init_webtool_routes(default_context_cache=self.default_context_cache),
-        )
+        staged = getattr(config.system_config, 'staged_loading', None)
+        text_only_server = staged is not None and staged.enabled and not staged.audio_enabled
+        if not text_only_server:
+            self.app.include_router(
+                init_webtool_routes(default_context_cache=self.default_context_cache),
+            )
+
+        staged = getattr(config.system_config, 'staged_loading', None)
+        if staged is not None and staged.enabled and not staged.audio_enabled:
+            from .text_conversation import init_text_routes
+            self.app.include_router(init_text_routes(self.default_context_cache))
 
         # Initialize and include proxy routes if proxy is enabled
         system_config = config.system_config
-        if hasattr(system_config, "enable_proxy") and system_config.enable_proxy:
+        if hasattr(system_config, "enable_proxy") and system_config.enable_proxy and not text_only_server:
             # Construct the server URL for the proxy
             host = system_config.host
             port = system_config.port
@@ -109,14 +117,18 @@ class WebSocketServer:
                 init_proxy_route(server_url=server_url),
             )
 
-        # Mount cache directory first (to ensure audio file access)
-        if not os.path.exists("cache"):
-            os.makedirs("cache")
-        self.app.mount(
-            "/cache",
-            CORSStaticFiles(directory="cache"),
-            name="cache",
-        )
+        if text_only_server:
+            return  # API-only: no frontend/submodule, Live2D assets or audio cache required
+
+        if not text_only_server:
+            # Mount cache directory first (to ensure audio file access)
+            if not os.path.exists("cache"):
+                os.makedirs("cache")
+            self.app.mount(
+                "/cache",
+                CORSStaticFiles(directory="cache"),
+                name="cache",
+            )
 
         # Mount static files with CORS-enabled handlers
         self.app.mount(
