@@ -41,28 +41,24 @@ class OllamaLLM(AsyncLLM):
     def preload_model(self):
         if self.staged_controller is not None:
             raise RuntimeError("staged_load_requires_verified_adapter")
-        self._preload_attempted = True
+        self.preload_succeeded = False
         try:
-            # preload model
-            logger.info("Preloading model for Ollama")
-            # Send the POST request to preload model
-            logger.debug(
-                requests.post(
-                    base_url.replace("/v1", "") + "/api/chat",
-                    json={
-                        "model": model,
-                        "keep_alive": keep_alive,
-                    },
-                    timeout=(3, 30),
-                )
+            response = requests.post(
+                self.base_url.rstrip("/").removesuffix("/v1") + "/api/chat",
+                json={"model": self.model, "keep_alive": self.keep_alive},
+                timeout=(3, 30),
             )
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Failed to preload model: {e}")
-            logger.critical(
-                "Fail to connect to Ollama backend. Is Ollama server running? Try running `ollama list` to start the server and try again.\nThe AI will repeat 'Error connecting chat endpoint' until the server is running."
-            )
-        except Exception as e:
-            logger.error(f"Failed to preload model: {e}")
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("done") is not True or payload.get("error"):
+                raise ValueError("preload_completion_not_verified")
+        except Exception as exc:
+            # Neither request bodies/URLs nor raw exception messages enter logs.
+            logger.error("Ollama preload failed ({})", type(exc).__name__)
+            raise RuntimeError("ollama_preload_failed") from None
+        self.preload_succeeded = True
+        self._preload_attempted = True  # cleanup is not enabled by a failed constructor
+
     async def chat_completion(self, *args, **kwargs):
         if self.staged_controller is not None:
             self.staged_controller.require_llm_ready()

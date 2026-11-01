@@ -1,0 +1,22 @@
+{
+  "os_observation": {
+    "memory": {
+      "available_bytes": 2042449920,
+      "commit_headroom_bytes": 4421619712,
+      "captured_at": 1519372.296
+    },
+    "runner_pids": [],
+    "captured_at": 1519372.296
+  },
+  "server_budget": {
+    "physical_peak_bytes": null,
+    "commit_peak_bytes": null,
+    "evidence": "unknown",
+    "evidence_id": "",
+    "profile": "model-free-v1:mcp-off:asr-off:ollama-preload-off:voicevox-wrapper"
+  },
+  "admission": {
+    "allowed": false,
+    "reason": "server_budget_unmeasured_or_wrong_profile"
+  }
+}
