@@ -1,0 +1,15 @@
+{
+  "authorized": false,
+  "scope": "text-only-v1:mcp-off:asr-off:tts-off:ollama-preload-off:calibration-asgi-one-session-no-listener",
+  "budget_evidence": "provisional_not_measured",
+  "max_runs": 1,
+  "run_id": null,
+  "source_sha": null,
+  "physical_cap_bytes": null,
+  "job_commit_cap_bytes": null,
+  "rapid_drop_bytes": null,
+  "cpu_cap_percent": null,
+  "deadline_seconds": null,
+  "rationale": null,
+  "expires_at": null
+}
