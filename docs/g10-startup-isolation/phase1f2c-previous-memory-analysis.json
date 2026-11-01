@@ -1,0 +1,198 @@
+{
+  "source_phase": "1F-2B",
+  "candidate_clock_stages": [
+    {
+      "stage": "python_native_import_begin",
+      "elapsed_s": 0.188
+    },
+    {
+      "stage": "python_native_import_complete",
+      "elapsed_s": 9.922
+    },
+    {
+      "stage": "configuration_validated",
+      "elapsed_s": 9.969,
+      "asr": "small",
+      "llm": "qwen2.5:3b",
+      "model_lease_seconds": 60
+    },
+    {
+      "stage": "asr_file_resolution_begin",
+      "elapsed_s": 9.985
+    },
+    {
+      "stage": "asr_file_resolution_complete",
+      "elapsed_s": 10.0
+    },
+    {
+      "stage": "asr_native_import_begin",
+      "elapsed_s": 10.0
+    },
+    {
+      "stage": "asr_native_import_complete",
+      "elapsed_s": 23.172
+    },
+    {
+      "stage": "mcp_discovery_begin",
+      "elapsed_s": 25.704,
+      "count": 1
+    },
+    {
+      "stage": "mcp_discovery_complete",
+      "elapsed_s": 25.75,
+      "count": 1,
+      "availability": {
+        "ddg-search": {
+          "state": "unavailable",
+          "required": false,
+          "reason": "RuntimeError"
+        },
+        "weather": {
+          "state": "unavailable",
+          "required": true,
+          "reason": "RuntimeError"
+        },
+        "komugi-context": {
+          "state": "unavailable",
+          "required": true,
+          "reason": "RuntimeError"
+        },
+        "komugi-weather-ai": {
+          "state": "unavailable",
+          "required": true,
+          "reason": "RuntimeError"
+        }
+      }
+    },
+    {
+      "stage": "ollama_preload_begin",
+      "elapsed_s": 26.36
+    }
+  ],
+  "controller_clock_resource_series": [
+    {
+      "controller_elapsed_s": 0.625,
+      "available_bytes": 2541789184,
+      "system_cpu_percent": null,
+      "backend_working_set_bytes": null,
+      "backend_private_bytes": null
+    },
+    {
+      "controller_elapsed_s": 2.984,
+      "available_bytes": 2499928064,
+      "system_cpu_percent": 21.0,
+      "backend_working_set_bytes": 57028608,
+      "backend_private_bytes": 281210880
+    },
+    {
+      "controller_elapsed_s": 5.297,
+      "available_bytes": 2486550528,
+      "system_cpu_percent": 14.85,
+      "backend_working_set_bytes": 73752576,
+      "backend_private_bytes": 294117376
+    },
+    {
+      "controller_elapsed_s": 7.625,
+      "available_bytes": 2439024640,
+      "system_cpu_percent": 18.79,
+      "backend_working_set_bytes": 102748160,
+      "backend_private_bytes": 322818048
+    },
+    {
+      "controller_elapsed_s": 9.953,
+      "available_bytes": 2403856384,
+      "system_cpu_percent": 20.72,
+      "backend_working_set_bytes": 135069696,
+      "backend_private_bytes": 354234368
+    },
+    {
+      "controller_elapsed_s": 12.281,
+      "available_bytes": 2394079232,
+      "system_cpu_percent": 19.8,
+      "backend_working_set_bytes": 143937536,
+      "backend_private_bytes": 385183744
+    },
+    {
+      "controller_elapsed_s": 14.609,
+      "available_bytes": 2150903808,
+      "system_cpu_percent": 14.44,
+      "backend_working_set_bytes": 153018368,
+      "backend_private_bytes": 391430144
+    },
+    {
+      "controller_elapsed_s": 17.078,
+      "available_bytes": 1918357504,
+      "system_cpu_percent": 32.08,
+      "backend_working_set_bytes": 153018368,
+      "backend_private_bytes": 391430144
+    },
+    {
+      "controller_elapsed_s": 19.422,
+      "available_bytes": 2302025728,
+      "system_cpu_percent": 26.51,
+      "backend_working_set_bytes": 243494912,
+      "backend_private_bytes": 480686080
+    },
+    {
+      "controller_elapsed_s": 21.75,
+      "available_bytes": 2275790848,
+      "system_cpu_percent": 23.74,
+      "backend_working_set_bytes": 270888960,
+      "backend_private_bytes": 507158528
+    },
+    {
+      "controller_elapsed_s": 24.078,
+      "available_bytes": 2259329024,
+      "system_cpu_percent": 18.04,
+      "backend_working_set_bytes": 290078720,
+      "backend_private_bytes": 527806464
+    },
+    {
+      "controller_elapsed_s": 26.406,
+      "available_bytes": 2030141440,
+      "system_cpu_percent": 47.82,
+      "backend_working_set_bytes": 613494784,
+      "backend_private_bytes": 856494080
+    },
+    {
+      "controller_elapsed_s": 28.734,
+      "available_bytes": 2077278208,
+      "system_cpu_percent": 27.67,
+      "backend_working_set_bytes": 571674624,
+      "backend_private_bytes": 807669760
+    },
+    {
+      "controller_elapsed_s": 31.062,
+      "available_bytes": 1978527744,
+      "system_cpu_percent": 19.88,
+      "backend_working_set_bytes": 571674624,
+      "backend_private_bytes": 807669760
+    },
+    {
+      "controller_elapsed_s": 33.406,
+      "available_bytes": 1222762496,
+      "system_cpu_percent": 32.3,
+      "backend_working_set_bytes": 571674624,
+      "backend_private_bytes": 807669760
+    }
+  ],
+  "clock_alignment": "not_exactly_known; do not assign exact resource increments to application stages",
+  "before": {
+    "available_bytes": 2541772800,
+    "commit_headroom_bytes": 4708868096
+  },
+  "stop_elapsed_s": 33.406,
+  "stop_reason": "available_RAM_below_1.5GiB",
+  "cleanup_available_bytes": 72642560,
+  "three_second_cooperative_grace_observed": true,
+  "asr_isolated_increment_bytes": null,
+  "ollama_isolated_increment_bytes": null,
+  "mcp_memory_increment_bytes": null,
+  "why_unknown": [
+    "ASR timings were deferred until later initialization and missing at abort.",
+    "Native imports, model construction, TTS/VAD, MCP and client setup share one Python process.",
+    "Ollama service operation can continue after the candidate request is cancelled.",
+    "No per-runner resource series existed during the previous trial; unrelated OS allocations cannot be excluded."
+  ],
+  "current_ollama_runner_is_new_observation_not_previous_trial_peak": true
+}

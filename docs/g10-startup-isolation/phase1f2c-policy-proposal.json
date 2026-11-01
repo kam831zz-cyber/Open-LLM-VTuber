@@ -1,0 +1,28 @@
+{
+  "scope": "offline_design_proposal_not_application_config",
+  "eager_preload": false,
+  "asr_mode": "lazy",
+  "text_only": true,
+  "physical_reserve_bytes": 1610612736,
+  "extra_margin_bytes": 268435456,
+  "margin_status": "provisional_policy_choice_not_a_measured_model_footprint",
+  "model_budgets": {
+    "client": {
+      "physical_peak_increment_bytes": null,
+      "commit_peak_increment_bytes": null,
+      "evidence": "unknown"
+    },
+    "asr": {
+      "physical_peak_increment_bytes": null,
+      "commit_peak_increment_bytes": null,
+      "evidence": "unknown"
+    },
+    "llm": {
+      "physical_peak_increment_bytes": null,
+      "commit_peak_increment_bytes": null,
+      "evidence": "unknown"
+    }
+  },
+  "real_loads_admissible": false,
+  "require_explicit_approval_for_real_measurement": true
+}

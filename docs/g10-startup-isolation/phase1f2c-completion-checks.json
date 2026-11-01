@@ -1,0 +1,75 @@
+{
+  "observed_jst": "2026-11-01T09:13:42.2259053+09:00",
+  "available_bytes": 2720976896,
+  "os_commit_headroom_kib": 5071848,
+  "ports": [
+    {
+      "LocalPort": 50021,
+      "OwningProcess": 13636
+    },
+    {
+      "LocalPort": 18876,
+      "OwningProcess": 12708
+    },
+    {
+      "LocalPort": 18875,
+      "OwningProcess": 15720
+    },
+    {
+      "LocalPort": 18874,
+      "OwningProcess": 13836
+    },
+    {
+      "LocalPort": 18873,
+      "OwningProcess": 5836
+    },
+    {
+      "LocalPort": 18081,
+      "OwningProcess": 8548
+    },
+    {
+      "LocalPort": 11434,
+      "OwningProcess": 13840
+    },
+    {
+      "LocalPort": 5005,
+      "OwningProcess": 14196
+    }
+  ],
+  "llama_runners": [],
+  "production_head": "34a815c2e783c874814b2938fe5beeaf8c957aaa",
+  "production_status": [
+    " M .python-version",
+    " M frontend",
+    " M mcp_servers.json"
+  ],
+  "hashes": [
+    {
+      "file": "index",
+      "sha256": "9A11ACD1DD9D84EE41BB567B88AD645C0DCDA643849D608F5109787D95FE3CB4"
+    },
+    {
+      "file": "conf.yaml",
+      "sha256": "0C71B9043795F039C8C81195FD1EC5558EED5DD243D2357FBDFEEC4B0975B6D3"
+    },
+    {
+      "file": "komugi.yaml",
+      "sha256": "17B145123B972246D6260E8787E82341E84653F0D860A1640B2A559DDB22F5FC"
+    },
+    {
+      "file": "mcp_servers.json",
+      "sha256": "14669790964CF30A1F9BD003ED0A282501EB2BAE85E5A6684381F53DE00D13EB"
+    }
+  ],
+  "frontend_staged_deletions": 226,
+  "frontend_head": "d176e7df2366952e3bacbf12cf9a8b18a4315932",
+  "required_gitlink": "160000 commit c0c86d957f73cd3a0e6c60f57617bf39321d3b95\tfrontend",
+  "ha_vm_state": [
+    "VMState=\"running\""
+  ],
+  "models_started_by_this_task": 0,
+  "inference_requests": 0,
+  "tts_requests": 0,
+  "read_only_ollama_ps_requests": 1,
+  "app_source_modified": false
+}

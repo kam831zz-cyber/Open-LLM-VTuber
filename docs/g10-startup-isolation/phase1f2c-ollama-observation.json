@@ -1,0 +1,20 @@
+{
+  "observed_jst": "2026-11-01T09:05:26.2065445+09:00",
+  "request": "GET /api/ps (read-only, one request)",
+  "process": {
+    "pid": 11084,
+    "parent_pid": 13840,
+    "name": "llama-server.exe",
+    "created_jst": "2026-11-01T08:59:53.346618+09:00",
+    "parent_name": "ollama.exe"
+  },
+  "models": [
+    {
+      "name": "qwen2.5:3b",
+      "reported_size_bytes": 2164166490,
+      "reported_size_vram_bytes": 0,
+      "expires_at": "2026-11-01T09:09:22.0369311+09:00"
+    }
+  ],
+  "note": "Request origin and transient load peak were not observed; no model action was sent by this task."
+}

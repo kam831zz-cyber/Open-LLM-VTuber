@@ -1,0 +1,427 @@
+{
+  "schema": 1,
+  "observed_jst": "2026-11-01T09:03:34.4951172+09:00",
+  "installed_bytes": 17179869184.0,
+  "os_visible_bytes": 13902508032,
+  "installed_minus_os_visible_bytes": 3277361152.0,
+  "gpu_reported": [
+    {
+      "Name": "AMD Radeon(TM) Graphics",
+      "AdapterRAM": 3221225472
+    }
+  ],
+  "memory": {
+    "available_bytes": 612904960,
+    "committed_bytes": 18277777408,
+    "commit_limit_bytes": 21150265344,
+    "commit_headroom_bytes": 2872487936,
+    "system_cache_bytes": 226369536,
+    "paged_pool_bytes": 481828864,
+    "nonpaged_pool_bytes": 588591104
+  },
+  "pagefiles": [
+    {
+      "AllocatedBaseSize": 6912,
+      "CurrentUsage": 959,
+      "PeakUsage": 2654
+    }
+  ],
+  "top_private": [
+    {
+      "Id": 11084,
+      "ProcessName": "llama-server",
+      "WorkingSet64": 2068058112,
+      "PrivateMemorySize64": 2301952000
+    },
+    {
+      "Id": 2880,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 1123041280,
+      "PrivateMemorySize64": 1307734016
+    },
+    {
+      "Id": 13576,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 352190464,
+      "PrivateMemorySize64": 1156407296
+    },
+    {
+      "Id": 14244,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 625750016,
+      "PrivateMemorySize64": 709406720
+    },
+    {
+      "Id": 13636,
+      "ProcessName": "run",
+      "WorkingSet64": 6074368,
+      "PrivateMemorySize64": 307462144
+    },
+    {
+      "Id": 8120,
+      "ProcessName": "codex",
+      "WorkingSet64": 342859776,
+      "PrivateMemorySize64": 302882816
+    },
+    {
+      "Id": 1860,
+      "ProcessName": "MsMpEng",
+      "WorkingSet64": 236953600,
+      "PrivateMemorySize64": 294129664
+    },
+    {
+      "Id": 8032,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 119226368,
+      "PrivateMemorySize64": 243605504
+    },
+    {
+      "Id": 14380,
+      "ProcessName": "chrome",
+      "WorkingSet64": 198909952,
+      "PrivateMemorySize64": 234803200
+    },
+    {
+      "Id": 5272,
+      "ProcessName": "RadeonSoftware",
+      "WorkingSet64": 85184512,
+      "PrivateMemorySize64": 218042368
+    },
+    {
+      "Id": 13232,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 150245376,
+      "PrivateMemorySize64": 204738560
+    },
+    {
+      "Id": 9652,
+      "ProcessName": "node",
+      "WorkingSet64": 61157376,
+      "PrivateMemorySize64": 198086656
+    },
+    {
+      "Id": 8688,
+      "ProcessName": "chrome",
+      "WorkingSet64": 287637504,
+      "PrivateMemorySize64": 196743168
+    },
+    {
+      "Id": 1612,
+      "ProcessName": "dwm",
+      "WorkingSet64": 72790016,
+      "PrivateMemorySize64": 172212224
+    },
+    {
+      "Id": 10636,
+      "ProcessName": "TextInputHost",
+      "WorkingSet64": 172924928,
+      "PrivateMemorySize64": 165105664
+    },
+    {
+      "Id": 10924,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 195629056,
+      "PrivateMemorySize64": 155332608
+    },
+    {
+      "Id": 6932,
+      "ProcessName": "chrome",
+      "WorkingSet64": 126599168,
+      "PrivateMemorySize64": 139735040
+    },
+    {
+      "Id": 6204,
+      "ProcessName": "chrome",
+      "WorkingSet64": 208457728,
+      "PrivateMemorySize64": 139264000
+    },
+    {
+      "Id": 5244,
+      "ProcessName": "node",
+      "WorkingSet64": 121778176,
+      "PrivateMemorySize64": 118468608
+    },
+    {
+      "Id": 14440,
+      "ProcessName": "node",
+      "WorkingSet64": 41459712,
+      "PrivateMemorySize64": 117817344
+    },
+    {
+      "Id": 7780,
+      "ProcessName": "WindowsTerminal",
+      "WorkingSet64": 87343104,
+      "PrivateMemorySize64": 97505280
+    },
+    {
+      "Id": 8608,
+      "ProcessName": "WidgetBoard",
+      "WorkingSet64": 120963072,
+      "PrivateMemorySize64": 96608256
+    },
+    {
+      "Id": 7332,
+      "ProcessName": "explorer",
+      "WorkingSet64": 224124928,
+      "PrivateMemorySize64": 90206208
+    },
+    {
+      "Id": 2904,
+      "ProcessName": "SystemSettings",
+      "WorkingSet64": 4788224,
+      "PrivateMemorySize64": 84602880
+    },
+    {
+      "Id": 12860,
+      "ProcessName": "msedgewebview2",
+      "WorkingSet64": 75796480,
+      "PrivateMemorySize64": 74928128
+    }
+  ],
+  "top_working_set": [
+    {
+      "Id": 11084,
+      "ProcessName": "llama-server",
+      "WorkingSet64": 2068058112,
+      "PrivateMemorySize64": 2301952000
+    },
+    {
+      "Id": 2880,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 1123041280,
+      "PrivateMemorySize64": 1307734016
+    },
+    {
+      "Id": 14244,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 625750016,
+      "PrivateMemorySize64": 709406720
+    },
+    {
+      "Id": 13576,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 352190464,
+      "PrivateMemorySize64": 1156407296
+    },
+    {
+      "Id": 8120,
+      "ProcessName": "codex",
+      "WorkingSet64": 342859776,
+      "PrivateMemorySize64": 302882816
+    },
+    {
+      "Id": 8688,
+      "ProcessName": "chrome",
+      "WorkingSet64": 287637504,
+      "PrivateMemorySize64": 196743168
+    },
+    {
+      "Id": 1860,
+      "ProcessName": "MsMpEng",
+      "WorkingSet64": 236953600,
+      "PrivateMemorySize64": 294129664
+    },
+    {
+      "Id": 7332,
+      "ProcessName": "explorer",
+      "WorkingSet64": 224124928,
+      "PrivateMemorySize64": 90206208
+    },
+    {
+      "Id": 6204,
+      "ProcessName": "chrome",
+      "WorkingSet64": 208457728,
+      "PrivateMemorySize64": 139264000
+    },
+    {
+      "Id": 14380,
+      "ProcessName": "chrome",
+      "WorkingSet64": 198909952,
+      "PrivateMemorySize64": 234803200
+    },
+    {
+      "Id": 10924,
+      "ProcessName": "ChatGPT",
+      "WorkingSet64": 195629056,
+      "PrivateMemorySize64": 155332608
+    },
+    {
+      "Id": 10636,
+      "ProcessName": "TextInputHost",
+      "WorkingSet64": 172924928,
+      "PrivateMemorySize64": 165105664
+    }
+  ],
+  "service_processes": [
+    {
+      "Id": 11084,
+      "ProcessName": "llama-server",
+      "WorkingSet64": 2068058112,
+      "PrivateMemorySize64": 2301952000
+    },
+    {
+      "Id": 13840,
+      "ProcessName": "ollama",
+      "WorkingSet64": 40013824,
+      "PrivateMemorySize64": 63623168
+    },
+    {
+      "Id": 5836,
+      "ProcessName": "python",
+      "WorkingSet64": 13602816,
+      "PrivateMemorySize64": 18145280
+    },
+    {
+      "Id": 8548,
+      "ProcessName": "python",
+      "WorkingSet64": 33239040,
+      "PrivateMemorySize64": 48402432
+    },
+    {
+      "Id": 12512,
+      "ProcessName": "python",
+      "WorkingSet64": 3276800,
+      "PrivateMemorySize64": 33779712
+    },
+    {
+      "Id": 12688,
+      "ProcessName": "python",
+      "WorkingSet64": 15904768,
+      "PrivateMemorySize64": 55406592
+    },
+    {
+      "Id": 12708,
+      "ProcessName": "python",
+      "WorkingSet64": 13807616,
+      "PrivateMemorySize64": 16723968
+    },
+    {
+      "Id": 13428,
+      "ProcessName": "python",
+      "WorkingSet64": 16924672,
+      "PrivateMemorySize64": 41320448
+    },
+    {
+      "Id": 13836,
+      "ProcessName": "python",
+      "WorkingSet64": 19054592,
+      "PrivateMemorySize64": 16863232
+    },
+    {
+      "Id": 14196,
+      "ProcessName": "python",
+      "WorkingSet64": 3198976,
+      "PrivateMemorySize64": 35164160
+    },
+    {
+      "Id": 14320,
+      "ProcessName": "python",
+      "WorkingSet64": 2994176,
+      "PrivateMemorySize64": 26693632
+    },
+    {
+      "Id": 15720,
+      "ProcessName": "python",
+      "WorkingSet64": 13721600,
+      "PrivateMemorySize64": 17350656
+    },
+    {
+      "Id": 13636,
+      "ProcessName": "run",
+      "WorkingSet64": 6074368,
+      "PrivateMemorySize64": 307462144
+    },
+    {
+      "Id": 5796,
+      "ProcessName": "VBoxHeadless",
+      "WorkingSet64": 56311808,
+      "PrivateMemorySize64": 50008064
+    },
+    {
+      "Id": 13620,
+      "ProcessName": "VBoxHeadless",
+      "WorkingSet64": 8970240,
+      "PrivateMemorySize64": 2383872
+    },
+    {
+      "Id": 13808,
+      "ProcessName": "VBoxHeadless",
+      "WorkingSet64": 5627904,
+      "PrivateMemorySize64": 3231744
+    },
+    {
+      "Id": 14108,
+      "ProcessName": "VBoxSDS",
+      "WorkingSet64": 17477632,
+      "PrivateMemorySize64": 4620288
+    },
+    {
+      "Id": 14008,
+      "ProcessName": "VBoxSVC",
+      "WorkingSet64": 23482368,
+      "PrivateMemorySize64": 6483968
+    }
+  ],
+  "listeners": [
+    {
+      "LocalPort": 50021,
+      "OwningProcess": 13636
+    },
+    {
+      "LocalPort": 18876,
+      "OwningProcess": 12708
+    },
+    {
+      "LocalPort": 18875,
+      "OwningProcess": 15720
+    },
+    {
+      "LocalPort": 18874,
+      "OwningProcess": 13836
+    },
+    {
+      "LocalPort": 18873,
+      "OwningProcess": 5836
+    },
+    {
+      "LocalPort": 18081,
+      "OwningProcess": 8548
+    },
+    {
+      "LocalPort": 11434,
+      "OwningProcess": 13840
+    },
+    {
+      "LocalPort": 5050,
+      "OwningProcess": 12688
+    },
+    {
+      "LocalPort": 5005,
+      "OwningProcess": 14196
+    },
+    {
+      "LocalPort": 5002,
+      "OwningProcess": 13428
+    },
+    {
+      "LocalPort": 5001,
+      "OwningProcess": 12512
+    },
+    {
+      "LocalPort": 5000,
+      "OwningProcess": 14320
+    }
+  ],
+  "ha_vm_selected_state": [
+    "memory=4096",
+    "cpus=2",
+    "VMState=\"running\""
+  ],
+  "notes": [
+    "Process fields are snapshots; working set includes shared pages.",
+    "Private Bytes and committed bytes are not physical RAM and must not be added to working sets.",
+    "VM configured memory is not host physical consumption.",
+    "Installed-visible gap is measured; attribution entirely to UMA is unproven.",
+    "No command lines, environment, credentials, entity attributes or conversation data collected."
+  ]
+}
