@@ -1,0 +1,84 @@
+{
+  "checked_at": "2026-11-01T13:08:35.1516186+09:00",
+  "production_branch": "v1-release",
+  "production_head": "34a815c2e783c874814b2938fe5beeaf8c957aaa",
+  "production_status": [
+    " M .python-version",
+    " M frontend",
+    " M mcp_servers.json"
+  ],
+  "hashes": {
+    "mcp_servers.json": "14669790964CF30A1F9BD003ED0A282501EB2BAE85E5A6684381F53DE00D13EB",
+    ".git\\index": "9A11ACD1DD9D84EE41BB567B88AD645C0DCDA643849D608F5109787D95FE3CB4",
+    "conf.yaml": "0C71B9043795F039C8C81195FD1EC5558EED5DD243D2357FBDFEEC4B0975B6D3",
+    "characters\\komugi.yaml": "17B145123B972246D6260E8787E82341E84653F0D860A1640B2A559DDB22F5FC"
+  },
+  "frontend_head": "d176e7df2366952e3bacbf12cf9a8b18a4315932",
+  "frontend_gitlink": "160000 c0c86d957f73cd3a0e6c60f57617bf39321d3b95 0\tfrontend",
+  "frontend_staged_deletions": 226,
+  "protected_ports": [
+    {
+      "port": 11434,
+      "owner_pids": [
+        13840
+      ],
+      "unchanged": true
+    },
+    {
+      "port": 18081,
+      "owner_pids": [
+        8548
+      ],
+      "unchanged": true
+    },
+    {
+      "port": 18873,
+      "owner_pids": [
+        5836
+      ],
+      "unchanged": true
+    },
+    {
+      "port": 18874,
+      "owner_pids": [
+        13836
+      ],
+      "unchanged": true
+    },
+    {
+      "port": 18875,
+      "owner_pids": [
+        15720
+      ],
+      "unchanged": true
+    },
+    {
+      "port": 18876,
+      "owner_pids": [
+        12708
+      ],
+      "unchanged": true
+    },
+    {
+      "port": 50021,
+      "owner_pids": [
+        13636
+      ],
+      "unchanged": true
+    },
+    {
+      "port": 5005,
+      "owner_pids": [
+        14196
+      ],
+      "unchanged": true
+    }
+  ],
+  "ha_running": true,
+  "available_gib": 1.807,
+  "cpu_percent": 15,
+  "llama_runner_count": 0,
+  "http_requests_performed": 0,
+  "real_servers_started": 0,
+  "model_loads": 0
+}

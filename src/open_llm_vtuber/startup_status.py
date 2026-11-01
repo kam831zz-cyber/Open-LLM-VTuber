@@ -14,7 +14,7 @@ def conversation_status(context):
              and all(isinstance(mcp.get(name), dict)
                      and mcp[name].get("required") is True
                      and mcp[name].get("state") == "ready" for name in required))
-    return {"conversation_core_ready": all((context.asr_engine is not None,
+    status = {"conversation_core_ready": all((context.asr_engine is not None,
                 context.tts_engine is not None, context.agent_engine is not None)),
             "mcp": mcp,
             "mcp_enabled": enabled,
@@ -22,3 +22,17 @@ def conversation_status(context):
             "required_mcp_ready": ready,
             "command_center": "not_checked", "llm_response": "not_tested",
             "tts_audio": "not_tested", "speaker_output": "not_tested"}
+
+    controller = getattr(context, "staged_controller", None)
+    if controller is not None:
+        model_status = controller.status()
+        status.update(model_status)
+        # MCP belongs to the session, model ownership to the server context.
+        status.update(required_mcp_ready=ready,
+                      required_mcp_state="disabled" if enabled is False else "ready" if ready else "unconfirmed")
+        status["conversation_core_constructed"] = context.agent_engine is not None and context.tts_engine is not None
+        status["conversation_core_ready"] = (status["conversation_core_constructed"]
+            and model_status["text_model_ready"]
+            and (controller.policy.text_only or controller.policy.asr_mode == "disabled" or model_status["asr_ready"]))
+        status["life_information_available"] = False  # 18000 availability has not been verified
+    return status

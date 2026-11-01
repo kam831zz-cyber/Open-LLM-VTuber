@@ -35,6 +35,8 @@ class AgentFactory:
             **kwargs: Additional arguments
         """
         logger.info(f"Initializing agent: {conversation_agent_choice}")
+        if kwargs.get("staged_controller") is not None and conversation_agent_choice != "basic_memory_agent":
+            raise ValueError("staged_agent_not_supported")
 
         if conversation_agent_choice == "basic_memory_agent":
             # Get the LLM provider choice from agent settings
@@ -54,6 +56,13 @@ class AgentFactory:
                 raise ValueError(
                     f"Configuration not found for LLM provider: {llm_provider}"
                 )
+
+            controller = kwargs.get("staged_controller")
+            if controller is not None:
+                if llm_provider != "ollama_llm":
+                    raise ValueError("staged_provider_not_supported")
+                llm_config = dict(llm_config, eager_preload=False,
+                                  unload_at_exit=False, staged_controller=controller)
 
             # Create the stateless LLM
             llm = StatelessLLMFactory.create_llm(

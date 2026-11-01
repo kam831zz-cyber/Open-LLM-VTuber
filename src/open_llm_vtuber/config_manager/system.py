@@ -1,6 +1,6 @@
 # config_manager/system.py
 from pydantic import Field, model_validator
-from typing import Dict, ClassVar
+from typing import Dict, ClassVar, Literal
 from .i18n import I18nMixin, Description
 
 
@@ -11,9 +11,18 @@ class KomugiFastPathSettings(I18nMixin):
     performance_record_enabled: bool = Field(True, alias="performance_record_enabled")
 
 
+class StagedLoadingSettings(I18nMixin):
+    # Opt-in only. Existing production configuration remains legacy.
+    enabled: bool = False
+    text_only: bool = True
+    asr_mode: Literal["disabled", "lazy", "eager"] = "disabled"
+    eager_preload: bool = False
+
+
 class SystemConfig(I18nMixin):
     """System configuration settings."""
 
+    staged_loading: StagedLoadingSettings = Field(default_factory=StagedLoadingSettings)
     conf_version: str = Field(..., alias="conf_version")
     host: str = Field(..., alias="host")
     port: int = Field(..., alias="port")

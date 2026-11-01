@@ -59,6 +59,8 @@ class LLMFactory:
                 temperature=kwargs.get("temperature"),
                 keep_alive=kwargs.get("keep_alive"),
                 unload_at_exit=kwargs.get("unload_at_exit"),
+                eager_preload=kwargs.get("eager_preload", True),
+                staged_controller=kwargs.get("staged_controller"),
             )
 
         elif llm_provider == "llama_cpp_llm":

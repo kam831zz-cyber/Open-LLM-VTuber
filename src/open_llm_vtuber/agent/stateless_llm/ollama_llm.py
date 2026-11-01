@@ -15,7 +15,11 @@ class OllamaLLM(AsyncLLM):
         temperature: float = 1.0,
         keep_alive: float = -1,
         unload_at_exit: bool = True,
+        eager_preload: bool = True,
+        staged_controller=None,
     ):
+        self.staged_controller = staged_controller
+        self._preload_attempted = False
         self.keep_alive = keep_alive
         self.unload_at_exit = unload_at_exit
         self.cleaned = False
@@ -27,6 +31,17 @@ class OllamaLLM(AsyncLLM):
             project_id=project_id,
             temperature=temperature,
         )
+        if staged_controller is not None:
+            staged_controller.bind_llm(self)
+        if eager_preload and staged_controller is None:
+            self.preload_model()
+        if unload_at_exit and staged_controller is None and self._preload_attempted:
+            atexit.register(self.cleanup)
+
+    def preload_model(self):
+        if self.staged_controller is not None:
+            raise RuntimeError("staged_load_requires_verified_adapter")
+        self._preload_attempted = True
         try:
             # preload model
             logger.info("Preloading model for Ollama")
@@ -48,9 +63,11 @@ class OllamaLLM(AsyncLLM):
             )
         except Exception as e:
             logger.error(f"Failed to preload model: {e}")
-        # If keep_alive is less than 0, register cleanup to unload the model
-        if unload_at_exit:
-            atexit.register(self.cleanup)
+    async def chat_completion(self, *args, **kwargs):
+        if self.staged_controller is not None:
+            self.staged_controller.require_llm_ready()
+        async for chunk in super().chat_completion(*args, **kwargs):
+            yield chunk
 
     def __del__(self):
         """Destructor to unload the model"""
@@ -58,7 +75,8 @@ class OllamaLLM(AsyncLLM):
 
     def cleanup(self):
         """Clean up function to unload the model when exitting"""
-        if not self.cleaned and self.unload_at_exit:
+        if (not getattr(self, "cleaned", True) and self.unload_at_exit
+                and self._preload_attempted and self.staged_controller is None):
             logger.info(f"Ollama: Unloading model: {self.model}")
             # Unload the model
             # unloading is just the same as preload, but with keep alive set to 0

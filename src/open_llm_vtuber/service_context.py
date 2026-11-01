@@ -74,6 +74,7 @@ class ServiceContext:
         self.send_text: Callable = None
         self.client_uid: str = None
         self._owns_agent = True
+        self.staged_controller = None
 
     def __str__(self):
         return (
@@ -218,6 +219,7 @@ class ServiceContext:
         tool_adapter: ToolAdapter | None = None,
         send_text: Callable = None,
         client_uid: str = None,
+        staged_controller=None,
     ) -> None:
         """
         Load the ServiceContext with the reference of the provided instances.
@@ -228,6 +230,7 @@ class ServiceContext:
         if not system_config:
             raise ValueError("system_config cannot be None")
 
+        self.staged_controller = staged_controller
         self.config = config
         self.system_config = system_config
         self.character_config = character_config
@@ -274,19 +277,33 @@ class ServiceContext:
         if not self.character_config:
             self.character_config = config.character_config
 
+        settings = getattr(self.system_config, "staged_loading", None)
+        if settings is not None and settings.enabled and self.staged_controller is None:
+            from .staged_loading import StagedController
+            self.staged_controller = StagedController(settings)
+        # Mode cannot be silently replaced on a character/config change.
+        if self.staged_controller is not None:
+            self.staged_controller.validate_mode(settings)
+
         # update all sub-configs
 
         # init live2d from character config
         self.init_live2d(config.character_config.live2d_model_name)
 
         # init asr from character config
-        self.init_asr(config.character_config.asr_config)
+        if self.staged_controller is None:
+            self.init_asr(config.character_config.asr_config)
+        else:
+            await self.staged_controller.prepare_asr(self, config.character_config.asr_config)
 
         # init tts from character config
         self.init_tts(config.character_config.tts_config)
 
         # init vad from character config
-        self.init_vad(config.character_config.vad_config)
+        if self.staged_controller is None:
+            self.init_vad(config.character_config.vad_config)
+        else:
+            self.vad_engine = None  # no native VAD initialization before explicit admission
 
         # Initialize shared ToolAdapter if it doesn't exist yet
         if (
@@ -313,9 +330,15 @@ class ServiceContext:
             config.character_config.persona_prompt,
         )
 
-        self.init_translate(
-            config.character_config.tts_preprocessor_config.translator_config
-        )
+        if self.staged_controller is not None:
+            await self.staged_controller.finish_startup()
+
+        if self.staged_controller is None:
+            self.init_translate(
+                config.character_config.tts_preprocessor_config.translator_config
+            )
+        else:
+            self.translate_engine = None  # speech translation is not initialized in the candidate
         self.init_komugi_fast_path()
 
         # store typed config references
@@ -333,6 +356,8 @@ class ServiceContext:
             logger.critical("Try to proceed without Live2D...")
 
     def init_asr(self, asr_config: ASRConfig) -> None:
+        if self.staged_controller is not None:
+            raise RuntimeError("staged_asr_requires_verified_adapter")
         if not self.asr_engine or (self.character_config.asr_config != asr_config):
             logger.info(f"Initializing ASR: {asr_config.asr_model}")
             self.asr_engine = ASRFactory.get_asr_system(
@@ -345,6 +370,8 @@ class ServiceContext:
             logger.info("ASR already initialized with the same config.")
 
     def init_tts(self, tts_config: TTSConfig) -> None:
+        if self.staged_controller is not None and tts_config.tts_model != "voicevox_tts":
+            raise RuntimeError("staged_tts_provider_not_supported")
         if not self.tts_engine or (self.character_config.tts_config != tts_config):
             logger.info(f"Initializing TTS: {tts_config.tts_model}")
             self.tts_engine = TTSFactory.get_tts_engine(
@@ -399,6 +426,7 @@ class ServiceContext:
                 live2d_model=self.live2d_model,
                 tts_preprocessor_config=self.character_config.tts_preprocessor_config,
                 character_avatar=avatar,
+                staged_controller=self.staged_controller,
                 system_config=self.system_config.model_dump(),
                 tool_manager=self.tool_manager,
                 tool_executor=self.tool_executor,

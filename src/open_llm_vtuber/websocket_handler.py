@@ -181,7 +181,9 @@ class WebSocketHandler:
         await self.send_group_update(websocket, client_uid)
 
         # Start microphone
-        await websocket.send_text(json.dumps({"type": "control", "text": "start-mic"}))
+        controller = getattr(session_service_context, "staged_controller", None)
+        if controller is None or controller.mic_ready():
+            await websocket.send_text(json.dumps({"type": "control", "text": "start-mic"}))
 
     async def _init_service_context(
         self, send_text: Callable, client_uid: str
@@ -207,6 +209,7 @@ class WebSocketHandler:
                 tool_adapter=self.default_context_cache.tool_adapter,
                 send_text=send_text,
                 client_uid=client_uid,
+                staged_controller=getattr(self.default_context_cache, "staged_controller", None),
             )
         except BaseException:
             await session_service_context.close()
@@ -399,6 +402,7 @@ class WebSocketHandler:
         else:
             await handle_individual_interrupt(
                 client_uid=client_uid,
+                staged_controller=getattr(self.default_context_cache, "staged_controller", None),
                 current_conversation_tasks=self.current_conversation_tasks,
                 context=context,
                 heard_response=heard_response,
@@ -488,10 +492,16 @@ class WebSocketHandler:
         if history_uid == context.history_uid:
             context.history_uid = None
 
+    def _microphone_allowed(self, client_uid):
+        controller = getattr(self.client_contexts[client_uid], "staged_controller", None)
+        return controller is None or controller.mic_ready()
+
     async def _handle_audio_data(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
     ) -> None:
         """Handle incoming audio data"""
+        if not self._microphone_allowed(client_uid):
+            return
         audio_data = data.get("audio", [])
         if audio_data:
             self.received_data_buffers[client_uid] = np.append(
@@ -504,6 +514,8 @@ class WebSocketHandler:
     ) -> None:
         """Handle incoming raw audio data for VAD processing"""
         context = self.client_contexts[client_uid]
+        if not self._microphone_allowed(client_uid):
+            return
         chunk = data.get("audio", [])
         if chunk:
             for audio_bytes in context.vad_engine.detect_speech(chunk):
@@ -527,6 +539,8 @@ class WebSocketHandler:
         self, websocket: WebSocket, client_uid: str, data: WSMessage
     ) -> None:
         """Handle triggers that start a conversation"""
+        if data.get("type") == "mic-audio-end" and not self._microphone_allowed(client_uid):
+            return
         await handle_conversation_trigger(
             msg_type=data.get("type", ""),
             data=data,
